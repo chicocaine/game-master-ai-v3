@@ -78,6 +78,7 @@ class StatusEffect:
 			"name": self.name,
 			"description": self.description,
 			"type": self.type.value,
+			"duration": self.duration,
 			"parameters": dict(self.parameters),
 		}
 
@@ -89,5 +90,6 @@ class StatusEffect:
 			name=_get_str(data, "name"),
 			description=_get_str(data, "description"),
 			type=_parse_status_effect_type(data.get("type")),
+			duration=_get_int(data.get("duration")),
 			parameters=_get_parameters(data),
 		)
