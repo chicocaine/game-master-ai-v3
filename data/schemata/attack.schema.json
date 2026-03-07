@@ -47,14 +47,25 @@
 					"damage_roll": { "type": "string", "minLength": 1 },
 					"hit_modifiers": { "type": "integer" },
 					"DC": { "type": "integer", "minimum": 0 },
-					"applied_status_effect_ids": {
-						"description": "Cross-reference to status_effects.json -> status_effect.id",
+					"applied_status_effects": {
+						"description": "Per-application status effects with their own durations",
 						"type": "array",
 						"items": {
-							"type": "string",
-							"pattern": "^[a-z][a-z0-9_]*$"
-						},
-						"uniqueItems": true
+							"type": "object",
+							"additionalProperties": false,
+							"required": ["status_effect_id", "duration"],
+							"properties": {
+								"status_effect_id": {
+									"description": "Cross-reference to status_effects.json -> status_effect.id",
+									"type": "string",
+									"pattern": "^[a-z][a-z0-9_]*$"
+								},
+								"duration": {
+									"type": "integer",
+									"minimum": 0
+								}
+							}
+						}
 					}
 				}
 			}

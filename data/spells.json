@@ -8,7 +8,12 @@
 		"parameters": {
 			"damage_types": ["fire"],
 			"damage_roll": "1d10+0",
-			"applied_status_effect_ids": ["se_burning"]
+			"applied_status_effects": [
+				{
+					"status_effect_id": "se_burning",
+					"duration": 2
+				}
+			]
 		}
 	},
 	{
@@ -19,7 +24,12 @@
 		"spell_cost": 1,
 		"parameters": {
 			"heal_roll": "1d8+2",
-			"applied_status_effect_ids": ["se_regeneration"]
+			"applied_status_effects": [
+				{
+					"status_effect_id": "se_regeneration",
+					"duration": 3
+				}
+			]
 		}
 	},
 	{
@@ -32,7 +42,12 @@
 			"damage_types": ["cold"],
 			"damage_roll": "1d8+0",
 			"DC": 13,
-			"applied_status_effect_ids": ["se_stunned"]
+			"applied_status_effects": [
+				{
+					"status_effect_id": "se_stunned",
+					"duration": 1
+				}
+			]
 		}
 	}
 ]
