@@ -9,10 +9,20 @@ def _parse_status_effect_type(status_effect_type: Any) -> StatusEffectType:
 		return status_effect_type
 	return StatusEffectType(str(status_effect_type))
 
+def _parse_damage_type(damage_type: Any) -> DamageType:
+	if isinstance(damage_type, DamageType):
+		return damage_type
+	if damage_type in (None, ""):
+		return DamageType.FORCE
+	return DamageType(str(damage_type))
+
 def _parse_damage_types(value: Any) -> List[DamageType]:
 	if not isinstance(value, list):
 		return []
-	return [DamageType(str(item)) for item in value]
+	parsed_damage_types: List[DamageType] = []
+	for item in value:
+		parsed_damage_types.append(_parse_damage_type(item))
+	return parsed_damage_types
 
 def _parse_control_type(value: Any) -> ControlType:
 	if not isinstance(value, ControlType):
