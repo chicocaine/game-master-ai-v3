@@ -3,6 +3,7 @@ from typing import Any, List
 
 from game.enums import (
 	DamageType,
+	ControlType,
 	WeaponProficiency,
 	WeaponHandling,
 	WeaponWeightClass,
@@ -25,12 +26,25 @@ def _parse_damage_type(value: Any) -> DamageType:
 		return value
 	return DamageType(str(value))
 
-def _parse_damage_type_list(value: Any) -> List[DamageType]:
+def _parse_damage_types(value: Any) -> List[DamageType]:
 	if not isinstance(value, list):
 		return []
 	parsed_types: List[DamageType] = []
 	for item in value:
 		parsed_types.append(_parse_damage_type(item))
+	return parsed_types
+
+def _parse_control_type(value: Any) -> ControlType:
+	if isinstance(value, ControlType):
+		return value
+	return ControlType(str(value))
+
+def _parse_control_types(value: Any) -> List[ControlType]:
+	if not isinstance(value, list):
+		return []
+	parsed_types: List[ControlType] = []
+	for item in value:
+		parsed_types.append(_parse_control_type(item))
 	return parsed_types
 
 def _parse_known_attacks(value: Any) -> List[Attack]:
@@ -54,17 +68,6 @@ def _parse_known_spells(value: Any) -> List[Spell]:
 		elif isinstance(item, dict):
 			spells.append(Spell.from_dict(item))
 	return spells
-
-def _parse_weapons(value: Any) -> List[Weapon]:
-	if not isinstance(value, list):
-		return []
-	weapons: List[Weapon] = []
-	for item in value:
-		if isinstance(item, Weapon):
-			weapons.append(item)
-		elif isinstance(item, dict):
-			weapons.append(Weapon.from_dict(item))
-	return weapons
 
 def _parse_weapon_proficiency(value: Any) -> WeaponProficiency:
 	if isinstance(value, WeaponProficiency):
@@ -141,10 +144,10 @@ class Archetype:
 	resistances: List[DamageType] = field(default_factory=list)
 	immunities: List[DamageType] = field(default_factory=list)
 	vulnerabilities: List[DamageType] = field(default_factory=list)
+	cc_immunities: List[ControlType] = field(default_factory=list)
 	weapon_constraints: WeaponConstraints = field(default_factory=WeaponConstraints)
 	known_spells: List[Spell] = field(default_factory=list)
 	known_attacks: List[Attack] = field(default_factory=list)
-	weapons: List[Weapon] = field(default_factory=list)
 
 	def to_dict(self) -> dict:
 		return {
@@ -158,10 +161,10 @@ class Archetype:
 			"resistances": [damage_type.value for damage_type in self.resistances],
 			"immunities": [damage_type.value for damage_type in self.immunities],
 			"vulnerabilities": [damage_type.value for damage_type in self.vulnerabilities],
+			"cc_immunities": [control_type.value for control_type in self.cc_immunities],
 			"weapon_constraints": self.weapon_constraints.to_dict(),
 			"known_spells": [spell.to_dict() for spell in self.known_spells],
 			"known_attacks": [attack.to_dict() for attack in self.known_attacks],
-			"weapons": [weapon.to_dict() for weapon in self.weapons],
 		}
 
 	@classmethod
@@ -174,11 +177,11 @@ class Archetype:
 			AC_mod=_get_int(data.get("AC_mod", 0)),
 			spell_slot_mod=_get_int(data.get("spell_slot_mod", 0)),
 			initiative_mod=_get_int(data.get("initiative_mod", 0)),
-			resistances=_parse_damage_type_list(data.get("resistances", [])),
-			immunities=_parse_damage_type_list(data.get("immunities", [])),
-			vulnerabilities=_parse_damage_type_list(data.get("vulnerabilities", [])),
+			resistances=_parse_damage_types(data.get("resistances", [])),
+			immunities=_parse_damage_types(data.get("immunities", [])),
+			vulnerabilities=_parse_damage_types(data.get("vulnerabilities", [])),
+			cc_immunities=_parse_control_types(data.get("cc_immunities", [])),
 			weapon_constraints=WeaponConstraints.from_dict(data.get("weapon_constraints", {})),
 			known_spells=_parse_known_spells(data.get("known_spells", [])),
 			known_attacks=_parse_known_attacks(data.get("known_attacks", [])),
-			weapons=_parse_weapons(data.get("weapons", [])),
 		)
