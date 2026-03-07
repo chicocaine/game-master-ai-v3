@@ -10,6 +10,7 @@ class StatusEffectType(Enum):
     DOT = "DoT"
     HOT = "HoT"
     CONTROL = "control"
+    CC_IMMUNITY = "cc_immunity"
     IMMUNITY = "immunity"
     RESISTANCE = "resistance"
     VULNERABLE = "vulnerable" 
