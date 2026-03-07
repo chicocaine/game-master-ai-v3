@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 from game.enums import SpellType, DamageType
-from game.combat_elements.status_effect import StatusEffect
+from game.combat_elements.status_effect import StatusEffectInstance
 
 
 def _parse_spell_type(attack_type: Any) -> SpellType:
@@ -25,10 +25,10 @@ def _parse_damage_types(value: Any) -> List[DamageType]:
 		parsed_damage_types.append(_parse_damage_type(item))
 	return parsed_damage_types
 
-def _parse_applied_status_effects(value: Any) -> List[StatusEffect]:
+def _parse_applied_status_effects(value: Any) -> List[StatusEffectInstance]:
 	if not isinstance(value, list):
 		return []
-	return [StatusEffect.from_dict(item) for item in value]
+	return [StatusEffectInstance.from_dict(item) for item in value]
     
 def _get_str(data: dict, key: str) -> str:
 	return str(data.get(key, ""))
@@ -70,7 +70,7 @@ class Spell:
         return _get_int(self.parameters.get("DC", 0))
 
     @property
-    def applied_status_effects(self) -> List[StatusEffect]:
+    def applied_status_effects(self) -> List[StatusEffectInstance]:
         return _parse_applied_status_effects(self.parameters.get("applied_status_effects", []))
 	
 

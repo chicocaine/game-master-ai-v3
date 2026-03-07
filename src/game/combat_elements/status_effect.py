@@ -46,7 +46,6 @@ class StatusEffect:
 	name: str
 	description: str
 	type: StatusEffectType
-	duration: int
 	parameters: Dict[str, Any] = field(default_factory=dict)
 
 	@property
@@ -103,3 +102,28 @@ class StatusEffect:
 			duration=_get_int(data.get("duration")),
 			parameters=_get_parameters(data),
 		)
+
+
+def _parse_status_effect(value: Any) -> StatusEffect:
+	if isinstance(value, StatusEffect):
+		return value
+	if isinstance(value, dict):
+		return StatusEffect.from_dict(value)
+	raise ValueError("Invalid status effect payload")
+
+
+@dataclass
+class StatusEffectInstance:
+	status_effect: StatusEffect
+	duration: int
+
+	@classmethod
+	def from_dict(cls, data: dict) -> "StatusEffectInstance":
+		status_effect_payload = data.get("status_effect") if "status_effect" in data else data
+		return cls(
+			status_effect=_parse_status_effect(status_effect_payload),
+			duration=_get_int(data.get("duration", 0)),
+		)
+
+	def tick_down(self) -> None:
+		self.duration = max(self.duration - 1, 0)
