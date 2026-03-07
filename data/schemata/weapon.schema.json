@@ -1,0 +1,68 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "weapon.schema.json",
+	"title": "Weapons",
+	"type": "array",
+	"items": {
+		"type": "object",
+		"additionalProperties": false,
+		"required": [
+			"id",
+			"name",
+			"description",
+			"proficiency",
+			"handling",
+			"weight_class",
+			"delivery",
+			"magic_type",
+			"known_attack_ids",
+			"known_spell_ids"
+		],
+		"properties": {
+			"id": {
+				"type": "string",
+				"pattern": "^[a-z][a-z0-9_]*$"
+			},
+			"name": { "type": "string", "minLength": 1 },
+			"description": { "type": "string" },
+			"proficiency": {
+				"type": "string",
+				"enum": ["simple", "martial", "exotic", "arcane", "divine", "tech"]
+			},
+			"handling": {
+				"type": "string",
+				"enum": ["one_handed", "two_handed", "versatile"]
+			},
+			"weight_class": {
+				"type": "string",
+				"enum": ["light", "heavy"]
+			},
+			"delivery": {
+				"type": "string",
+				"enum": ["melee", "ranged", "versatile"]
+			},
+			"magic_type": {
+				"type": "string",
+				"enum": ["mundane", "enchanted", "focus", "augment"]
+			},
+			"known_attack_ids": {
+				"description": "Cross-reference to attacks.json -> attack.id",
+				"type": "array",
+				"items": {
+					"type": "string",
+					"pattern": "^[a-z][a-z0-9_]*$"
+				},
+				"uniqueItems": true
+			},
+			"known_spell_ids": {
+				"description": "Cross-reference to spells.json -> spell.id",
+				"type": "array",
+				"items": {
+					"type": "string",
+					"pattern": "^[a-z][a-z0-9_]*$"
+				},
+				"uniqueItems": true
+			}
+		}
+	}
+}

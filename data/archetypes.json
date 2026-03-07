@@ -1,0 +1,68 @@
+[
+	{
+		"id": "arch_knight",
+		"name": "Knight",
+		"description": "Frontline fighter with high battlefield control.",
+		"hp_mod": 6,
+		"AC_mod": 3,
+		"spell_slot_mod": 0,
+		"initiative_mod": -1,
+		"resistances": ["slashing"],
+		"immunities": [],
+		"vulnerabilities": ["lightning"],
+		"cc_immunities": [],
+		"weapon_constraints": {
+			"proficiency": ["simple", "martial"],
+			"handling": ["one_handed", "two_handed", "versatile"],
+			"weight_class": ["light", "heavy"],
+			"delivery": ["melee", "versatile"],
+			"magic_type": ["mundane", "enchanted"]
+		},
+		"known_spell_ids": [],
+		"known_attack_ids": ["atk_shield_bash"]
+	},
+	{
+		"id": "arch_mage",
+		"name": "Mage",
+		"description": "Spell-focused specialist with broad utility.",
+		"hp_mod": -1,
+		"AC_mod": 0,
+		"spell_slot_mod": 3,
+		"initiative_mod": 1,
+		"resistances": ["fire"],
+		"immunities": [],
+		"vulnerabilities": ["piercing"],
+		"cc_immunities": ["silenced"],
+		"weapon_constraints": {
+			"proficiency": ["arcane"],
+			"handling": ["two_handed", "versatile"],
+			"weight_class": ["light"],
+			"delivery": ["versatile", "ranged"],
+			"magic_type": ["focus", "enchanted"]
+		},
+		"known_spell_ids": ["spl_firebolt", "spl_healing_light"],
+		"known_attack_ids": []
+	},
+	{
+		"id": "arch_ranger",
+		"name": "Ranger",
+		"description": "Mobile weapon specialist with tactical versatility.",
+		"hp_mod": 2,
+		"AC_mod": 1,
+		"spell_slot_mod": 1,
+		"initiative_mod": 2,
+		"resistances": ["cold"],
+		"immunities": [],
+		"vulnerabilities": [],
+		"cc_immunities": [],
+		"weapon_constraints": {
+			"proficiency": ["simple", "martial"],
+			"handling": ["one_handed", "two_handed", "versatile"],
+			"weight_class": ["light"],
+			"delivery": ["ranged", "melee", "versatile"],
+			"magic_type": ["mundane", "enchanted"]
+		},
+		"known_spell_ids": [],
+		"known_attack_ids": ["atk_power_shot"]
+	}
+]

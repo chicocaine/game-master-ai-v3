@@ -1,0 +1,38 @@
+[
+	{
+		"id": "spl_firebolt",
+		"name": "Firebolt",
+		"description": "Launch a bolt of fire at a single enemy.",
+		"type": "attack",
+		"spell_cost": 1,
+		"parameters": {
+			"damage_types": ["fire"],
+			"damage_roll": "1d10+0",
+			"applied_status_effect_ids": ["se_burning"]
+		}
+	},
+	{
+		"id": "spl_healing_light",
+		"name": "Healing Light",
+		"description": "Restore vitality to an ally.",
+		"type": "heal",
+		"spell_cost": 1,
+		"parameters": {
+			"heal_roll": "1d8+2",
+			"applied_status_effect_ids": ["se_regeneration"]
+		}
+	},
+	{
+		"id": "spl_ice_lance",
+		"name": "Ice Lance",
+		"description": "A sharp shard of ice that hinders movement.",
+		"type": "control",
+		"spell_cost": 2,
+		"parameters": {
+			"damage_types": ["cold"],
+			"damage_roll": "1d8+0",
+			"DC": 13,
+			"applied_status_effect_ids": ["se_stunned"]
+		}
+	}
+]

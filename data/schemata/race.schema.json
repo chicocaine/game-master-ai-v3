@@ -1,0 +1,98 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "race.schema.json",
+	"title": "Races",
+	"type": "array",
+	"items": {
+		"type": "object",
+		"additionalProperties": false,
+		"required": [
+			"id",
+			"name",
+			"description",
+			"base_hp",
+			"base_AC",
+			"base_spell_slots",
+			"resistances",
+			"immunities",
+			"vulnerabilities",
+			"cc_immunities",
+			"archetype_constraints",
+			"known_spell_ids",
+			"known_attack_ids"
+		],
+		"properties": {
+			"id": {
+				"type": "string",
+				"pattern": "^[a-z][a-z0-9_]*$"
+			},
+			"name": { "type": "string", "minLength": 1 },
+			"description": { "type": "string" },
+			"base_hp": { "type": "integer", "minimum": 0 },
+			"base_AC": { "type": "integer", "minimum": 0 },
+			"base_spell_slots": { "type": "integer", "minimum": 0 },
+			"resistances": { "$ref": "#/$defs/damageTypeArray" },
+			"immunities": { "$ref": "#/$defs/damageTypeArray" },
+			"vulnerabilities": { "$ref": "#/$defs/damageTypeArray" },
+			"cc_immunities": {
+				"type": "array",
+				"items": {
+					"type": "string",
+					"enum": ["stunned", "asleep", "restrained", "silenced"]
+				},
+				"uniqueItems": true
+			},
+			"archetype_constraints": {
+				"description": "Cross-reference to archetypes.json -> archetype.id",
+				"type": "array",
+				"items": {
+					"type": "string",
+					"pattern": "^[a-z][a-z0-9_]*$"
+				},
+				"uniqueItems": true
+			},
+			"known_spell_ids": {
+				"description": "Cross-reference to spells.json -> spell.id",
+				"type": "array",
+				"items": {
+					"type": "string",
+					"pattern": "^[a-z][a-z0-9_]*$"
+				},
+				"uniqueItems": true
+			},
+			"known_attack_ids": {
+				"description": "Cross-reference to attacks.json -> attack.id",
+				"type": "array",
+				"items": {
+					"type": "string",
+					"pattern": "^[a-z][a-z0-9_]*$"
+				},
+				"uniqueItems": true
+			}
+		}
+	},
+	"$defs": {
+		"damageTypeArray": {
+			"type": "array",
+			"items": {
+				"type": "string",
+				"enum": [
+					"acid",
+					"bludgeoning",
+					"cold",
+					"fire",
+					"force",
+					"lightning",
+					"necrotic",
+					"piercing",
+					"poison",
+					"psychic",
+					"radiant",
+					"slashing",
+					"thunder"
+				]
+			},
+			"uniqueItems": true
+		}
+	}
+}

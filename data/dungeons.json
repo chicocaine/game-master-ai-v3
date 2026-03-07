@@ -1,0 +1,65 @@
+[
+	{
+		"id": "dng_ember_ruins",
+		"name": "Ember Ruins",
+		"description": "A collapsed stronghold with lingering arcane heat.",
+		"difficulty": "medium",
+		"start_room_id": "room_gate",
+		"end_room_id": "room_sanctum",
+		"rooms": [
+			{
+				"id": "room_gate",
+				"name": "Shattered Gate",
+				"description": "Broken stone arches mark the dungeon entrance.",
+				"is_visited": false,
+				"is_cleared": false,
+				"is_rested": false,
+				"connection_room_ids": ["room_hall"],
+				"allowed_rests": ["short"],
+				"encounters": [
+					{
+						"id": "enc_gate_1",
+						"name": "Gate Ambush",
+						"description": "Skirmishers hide among the rubble.",
+						"difficulty": "easy",
+						"cleared": false,
+						"clear_reward": 20,
+						"enemy_ids": ["enemy_goblin_skirmisher"]
+					}
+				]
+			},
+			{
+				"id": "room_hall",
+				"name": "Ash Hall",
+				"description": "A long corridor lined with extinguished braziers.",
+				"is_visited": false,
+				"is_cleared": false,
+				"is_rested": false,
+				"connection_room_ids": ["room_gate", "room_sanctum"],
+				"allowed_rests": [],
+				"encounters": []
+			},
+			{
+				"id": "room_sanctum",
+				"name": "Cinder Sanctum",
+				"description": "A ritual chamber where heat still hangs in the air.",
+				"is_visited": false,
+				"is_cleared": false,
+				"is_rested": false,
+				"connection_room_ids": ["room_hall"],
+				"allowed_rests": ["short", "long"],
+				"encounters": [
+					{
+						"id": "enc_sanctum_1",
+						"name": "Wraith Keeper",
+						"description": "The sanctum guardian emerges from the embers.",
+						"difficulty": "hard",
+						"cleared": false,
+						"clear_reward": 60,
+						"enemy_ids": ["enemy_ash_wraith"]
+					}
+				]
+			}
+		]
+	}
+]

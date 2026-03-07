@@ -1,0 +1,32 @@
+[
+	{
+		"id": "race_human",
+		"name": "Human",
+		"description": "Adaptable and balanced adventurers.",
+		"base_hp": 12,
+		"base_AC": 10,
+		"base_spell_slots": 1,
+		"resistances": [],
+		"immunities": [],
+		"vulnerabilities": [],
+		"cc_immunities": [],
+		"archetype_constraints": ["arch_knight", "arch_mage", "arch_ranger"],
+		"known_spell_ids": [],
+		"known_attack_ids": []
+	},
+	{
+		"id": "race_elf",
+		"name": "Elf",
+		"description": "Keen-minded and naturally attuned to magic.",
+		"base_hp": 10,
+		"base_AC": 11,
+		"base_spell_slots": 2,
+		"resistances": ["psychic"],
+		"immunities": [],
+		"vulnerabilities": [],
+		"cc_immunities": ["asleep"],
+		"archetype_constraints": ["arch_mage", "arch_ranger"],
+		"known_spell_ids": ["spl_ice_lance"],
+		"known_attack_ids": []
+	}
+]

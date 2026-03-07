@@ -1,0 +1,38 @@
+[
+	{
+		"id": "atk_slash",
+		"name": "Slash",
+		"description": "A reliable close-range strike.",
+		"type": "melee",
+		"parameters": {
+			"damage_types": ["slashing"],
+			"damage_roll": "1d8+2",
+			"hit_modifiers": 2,
+			"applied_status_effect_ids": []
+		}
+	},
+	{
+		"id": "atk_power_shot",
+		"name": "Power Shot",
+		"description": "A heavy ranged shot with high impact.",
+		"type": "ranged",
+		"parameters": {
+			"damage_types": ["piercing"],
+			"damage_roll": "1d10+1",
+			"hit_modifiers": 1,
+			"applied_status_effect_ids": []
+		}
+	},
+	{
+		"id": "atk_shield_bash",
+		"name": "Shield Bash",
+		"description": "A blunt slam that can stagger enemies.",
+		"type": "melee",
+		"parameters": {
+			"damage_types": ["bludgeoning"],
+			"damage_roll": "1d6+1",
+			"DC": 12,
+			"applied_status_effect_ids": ["se_stunned"]
+		}
+	}
+]

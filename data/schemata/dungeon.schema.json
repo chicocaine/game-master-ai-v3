@@ -1,0 +1,118 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "dungeon.schema.json",
+	"title": "Dungeons",
+	"type": "array",
+	"items": {
+		"type": "object",
+		"additionalProperties": false,
+		"required": ["id", "name", "description", "difficulty", "start_room_id", "end_room_id", "rooms"],
+		"properties": {
+			"id": {
+				"type": "string",
+				"pattern": "^[a-z][a-z0-9_]*$"
+			},
+			"name": { "type": "string", "minLength": 1 },
+			"description": { "type": "string" },
+			"difficulty": {
+				"type": "string",
+				"enum": ["easy", "medium", "hard"]
+			},
+			"start_room_id": {
+				"description": "Cross-reference to this object's rooms[].id",
+				"type": "string",
+				"pattern": "^[a-z][a-z0-9_]*$"
+			},
+			"end_room_id": {
+				"description": "Cross-reference to this object's rooms[].id",
+				"type": "string",
+				"pattern": "^[a-z][a-z0-9_]*$"
+			},
+			"rooms": {
+				"type": "array",
+				"items": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": [
+						"id",
+						"name",
+						"description",
+						"is_visited",
+						"is_cleared",
+						"is_rested",
+						"connection_room_ids",
+						"allowed_rests",
+						"encounters"
+					],
+					"properties": {
+						"id": {
+							"type": "string",
+							"pattern": "^[a-z][a-z0-9_]*$"
+						},
+						"name": { "type": "string", "minLength": 1 },
+						"description": { "type": "string" },
+						"is_visited": { "type": "boolean" },
+						"is_cleared": { "type": "boolean" },
+						"is_rested": { "type": "boolean" },
+						"connection_room_ids": {
+							"description": "Cross-reference to this object's rooms[].id",
+							"type": "array",
+							"items": {
+								"type": "string",
+								"pattern": "^[a-z][a-z0-9_]*$"
+							},
+							"uniqueItems": true
+						},
+						"allowed_rests": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"enum": ["short", "long"]
+							},
+							"uniqueItems": true
+						},
+						"encounters": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"additionalProperties": false,
+								"required": [
+									"id",
+									"name",
+									"description",
+									"difficulty",
+									"cleared",
+									"clear_reward",
+									"enemy_ids"
+								],
+								"properties": {
+									"id": {
+										"type": "string",
+										"pattern": "^[a-z][a-z0-9_]*$"
+									},
+									"name": { "type": "string", "minLength": 1 },
+									"description": { "type": "string" },
+									"difficulty": {
+										"type": "string",
+										"enum": ["easy", "medium", "hard"]
+									},
+									"cleared": { "type": "boolean" },
+									"clear_reward": { "type": "integer", "minimum": 0 },
+									"enemy_ids": {
+										"description": "Cross-reference to enemies.json -> enemy.id",
+										"type": "array",
+										"items": {
+											"type": "string",
+											"pattern": "^[a-z][a-z0-9_]*$"
+										},
+										"uniqueItems": true
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

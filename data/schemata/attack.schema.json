@@ -1,0 +1,63 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "attack.schema.json",
+	"title": "Attacks",
+	"type": "array",
+	"items": {
+		"type": "object",
+		"additionalProperties": false,
+		"required": ["id", "name", "description", "type", "parameters"],
+		"properties": {
+			"id": {
+				"type": "string",
+				"pattern": "^[a-z][a-z0-9_]*$"
+			},
+			"name": { "type": "string", "minLength": 1 },
+			"description": { "type": "string" },
+			"type": {
+				"type": "string",
+				"enum": ["melee", "ranged", "unarmed", "aoe_melee", "aoe_ranged", "aoe_unarmed"]
+			},
+			"parameters": {
+				"type": "object",
+				"additionalProperties": false,
+				"properties": {
+					"damage_types": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"enum": [
+								"acid",
+								"bludgeoning",
+								"cold",
+								"fire",
+								"force",
+								"lightning",
+								"necrotic",
+								"piercing",
+								"poison",
+								"psychic",
+								"radiant",
+								"slashing",
+								"thunder"
+							]
+						},
+						"uniqueItems": true
+					},
+					"damage_roll": { "type": "string", "minLength": 1 },
+					"hit_modifiers": { "type": "integer" },
+					"DC": { "type": "integer", "minimum": 0 },
+					"applied_status_effect_ids": {
+						"description": "Cross-reference to status_effects.json -> status_effect.id",
+						"type": "array",
+						"items": {
+							"type": "string",
+							"pattern": "^[a-z][a-z0-9_]*$"
+						},
+						"uniqueItems": true
+					}
+				}
+			}
+		}
+	}
+}

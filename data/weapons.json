@@ -1,0 +1,38 @@
+[
+	{
+		"id": "wpn_iron_sword",
+		"name": "Iron Sword",
+		"description": "A balanced martial blade.",
+		"proficiency": "martial",
+		"handling": "one_handed",
+		"weight_class": "light",
+		"delivery": "melee",
+		"magic_type": "mundane",
+		"known_attack_ids": ["atk_slash"],
+		"known_spell_ids": []
+	},
+	{
+		"id": "wpn_hunter_bow",
+		"name": "Hunter Bow",
+		"description": "A sturdy long-range bow.",
+		"proficiency": "martial",
+		"handling": "two_handed",
+		"weight_class": "light",
+		"delivery": "ranged",
+		"magic_type": "mundane",
+		"known_attack_ids": ["atk_power_shot"],
+		"known_spell_ids": []
+	},
+	{
+		"id": "wpn_sage_staff",
+		"name": "Sage Staff",
+		"description": "An arcane focus used by learned casters.",
+		"proficiency": "arcane",
+		"handling": "two_handed",
+		"weight_class": "light",
+		"delivery": "versatile",
+		"magic_type": "focus",
+		"known_attack_ids": [],
+		"known_spell_ids": ["spl_firebolt", "spl_healing_light"]
+	}
+]

@@ -1,0 +1,55 @@
+[
+	{
+		"id": "player_lyra",
+		"player_instance_id": "pinst_lyra_001",
+		"name": "Lyra",
+		"description": "A disciplined elemental scholar.",
+		"race_id": "race_elf",
+		"archetype_id": "arch_mage",
+		"weapon_ids": ["wpn_sage_staff"],
+		"hp": 9,
+		"max_hp": 9,
+		"base_AC": 11,
+		"AC": 12,
+		"spell_slots": 5,
+		"max_spell_slots": 5,
+		"initiative_mod": 2,
+		"attack_modifier_bonus": 1,
+		"active_status_effects": [],
+		"known_attack_ids": [],
+		"known_spell_ids": ["spl_firebolt", "spl_healing_light", "spl_ice_lance"],
+		"resistances": ["psychic", "fire"],
+		"immunities": [],
+		"vulnerabilities": ["piercing"],
+		"cc_immunities": ["asleep", "silenced"]
+	},
+	{
+		"id": "player_brom",
+		"player_instance_id": "pinst_brom_001",
+		"name": "Brom",
+		"description": "A heavily armored vanguard.",
+		"race_id": "race_human",
+		"archetype_id": "arch_knight",
+		"weapon_ids": ["wpn_iron_sword"],
+		"hp": 18,
+		"max_hp": 18,
+		"base_AC": 13,
+		"AC": 14,
+		"spell_slots": 1,
+		"max_spell_slots": 1,
+		"initiative_mod": -1,
+		"attack_modifier_bonus": 2,
+		"active_status_effects": [
+			{
+				"status_effect_id": "se_regeneration",
+				"duration": 1
+			}
+		],
+		"known_attack_ids": ["atk_slash", "atk_shield_bash"],
+		"known_spell_ids": [],
+		"resistances": ["slashing"],
+		"immunities": [],
+		"vulnerabilities": ["lightning"],
+		"cc_immunities": []
+	}
+]

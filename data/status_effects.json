@@ -1,0 +1,33 @@
+[
+	{
+		"id": "se_burning",
+		"name": "Burning",
+		"description": "Target takes fire damage each turn.",
+		"type": "DoT",
+		"duration": 2,
+		"parameters": {
+			"damage_types": ["fire"],
+			"damage_value": 3
+		}
+	},
+	{
+		"id": "se_stunned",
+		"name": "Stunned",
+		"description": "Target is unable to act.",
+		"type": "control",
+		"duration": 1,
+		"parameters": {
+			"control_type": "stunned"
+		}
+	},
+	{
+		"id": "se_regeneration",
+		"name": "Regeneration",
+		"description": "Target recovers health over time.",
+		"type": "HoT",
+		"duration": 3,
+		"parameters": {
+			"heal_value": 2
+		}
+	}
+]
