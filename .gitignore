@@ -1,0 +1,6 @@
+.venv
+.env
+__pycache__
+logs/errors/*.json
+logs/events/*.json
+logs/sessions/*.json
