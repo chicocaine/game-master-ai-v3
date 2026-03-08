@@ -46,7 +46,7 @@ class Attack:
     name: str
     description: str
     type: AttackType
-    parameters: Dict[str, Any] = field(default_factory=list)
+    parameters: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def damage_types(self) -> List[DamageType]:
@@ -82,10 +82,9 @@ class Attack:
     @classmethod
     def from_dict(cls, data: dict) -> "Attack":
         return cls(
-			id=_get_str(data, "id"),
-			name=_get_str(data, "name"),
-			description=_get_str(data, "description"),
-			type=_parse_attack_type(data.get("type")),
-			duration=_get_int(data.get("duration")),
-			parameters=_get_parameters(data),
-		)
+            id=_get_str(data, "id"),
+            name=_get_str(data, "name"),
+            description=_get_str(data, "description"),
+            type=_parse_attack_type(data.get("type")),
+            parameters=_get_parameters(data),
+        )

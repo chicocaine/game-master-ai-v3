@@ -47,7 +47,7 @@ class Spell:
     description: str
     type: SpellType
     spell_cost: int
-    parameters: Dict[str, Any] = field(default_factory=list)
+    parameters: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def damage_types(self) -> List[DamageType]:
@@ -80,6 +80,7 @@ class Spell:
             "name": self.name,
             "description": self.description,
             "type": self.type.value,
+            "spell_cost": self.spell_cost,
             "parameters": dict(self.parameters),
         }
 	
@@ -91,6 +92,6 @@ class Spell:
 			name=_get_str(data, "name"),
 			description=_get_str(data, "description"),
 			type=_parse_spell_type(data.get("type")),
-			duration=_get_int(data.get("duration")),
+            spell_cost=_get_int(data.get("spell_cost", 0)),
 			parameters=_get_parameters(data),
 		)

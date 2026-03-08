@@ -25,9 +25,9 @@ def _parse_damage_types(value: Any) -> List[DamageType]:
 	return parsed_damage_types
 
 def _parse_control_type(value: Any) -> ControlType:
-	if not isinstance(value, ControlType):
-		return None
-	return value
+	if isinstance(value, ControlType):
+		return value
+	return ControlType(str(value))
 
 def _get_str(data: dict, key: str) -> str:
 	return str(data.get(key, ""))
@@ -87,7 +87,6 @@ class StatusEffect:
 			"name": self.name,
 			"description": self.description,
 			"type": self.type.value,
-			"duration": self.duration,
 			"parameters": dict(self.parameters),
 		}
 
@@ -99,7 +98,6 @@ class StatusEffect:
 			name=_get_str(data, "name"),
 			description=_get_str(data, "description"),
 			type=_parse_status_effect_type(data.get("type")),
-			duration=_get_int(data.get("duration")),
 			parameters=_get_parameters(data),
 		)
 

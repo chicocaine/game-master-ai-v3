@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, List
 from core.action import Action, validate_action
 from core.action_result import ActionResult
 from core.enums import ActionType
+from game.combat.resolution import resolve_attack_action, resolve_cast_spell_action
 from game.dungeons.dungeon import Encounter
 from game.enums import GameState
 
@@ -79,7 +80,7 @@ class EncounterState:
         validation_result = self._validate_action_turn_owner(action)
         if validation_result.errors:
             return validation_result
-        return ActionResult.failure(errors=["Attack resolution is not implemented yet."])
+        return resolve_attack_action(session, self.current_encounter, action)
 
     def handle_cast_spell(self, session: "GameSession", action: Action) -> ActionResult:
         if self.current_encounter is None:
@@ -89,7 +90,7 @@ class EncounterState:
         validation_result = self._validate_action_turn_owner(action)
         if validation_result.errors:
             return validation_result
-        return ActionResult.failure(errors=["Spell resolution is not implemented yet."])
+        return resolve_cast_spell_action(session, self.current_encounter, action)
 
     def handle_end_turn(self, session: "GameSession", action: Action | None = None) -> ActionResult:
         if action is not None:
@@ -117,6 +118,16 @@ class EncounterState:
             return ActionResult.failure(errors=["No active encounter to advance turn."])
         if not self.turn_order:
             return ActionResult.failure(errors=["Cannot advance turn because turn order is empty."])
+
+        alive_players = [player for player in session.party if player.hp > 0]
+        alive_enemies = [enemy for enemy in self.current_encounter.enemies if enemy.hp > 0]
+        if not alive_enemies:
+            return self.end_encounter(session)
+        if not alive_players:
+            if hasattr(session, "transition_to"):
+                return session.transition_to(GameState.POSTGAME)
+            session.state = GameState.POSTGAME
+            return ActionResult.success(state_changes={"state": {"to": GameState.POSTGAME.value}})
 
         # check if next actor in turn order is stunned or downed(hp=0), if so, skip turn
         # advance turn
