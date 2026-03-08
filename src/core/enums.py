@@ -6,7 +6,6 @@ class ActionType(Enum):
     CONVERSE = "converse"
 
     MOVE = "move"
-    EXPLORE = "explore"
     REST = "rest"
 
     ATTACK = "attack"
