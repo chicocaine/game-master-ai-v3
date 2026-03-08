@@ -31,12 +31,8 @@ class PreGameState:
     }
 
     @staticmethod
-    def _ok() -> List[str]:
-        return []
-
-    @staticmethod
-    def _unsupported_action(action: Action) -> List[str]:
-        return [f"Unsupported pregame action type: '{action.type.value}'."]
+    def _unsupported_action(action: Action) -> ActionResult:
+        return ActionResult.failure(errors=[f"Unsupported pregame action type: '{action.type.value}'."])
 
     def _next_player_instance_id(self, session: "GameSession") -> str:
         used_ids = {player.player_instance_id for player in session.party if player.player_instance_id}
@@ -60,9 +56,9 @@ class PreGameState:
         race: Race,
         archetype: Archetype,
         weapons: List[Weapon],
-    ) -> List[str]:
+    ) -> ActionResult:
         if len(session.party) >= MAX_PARTY_SIZE:
-            return [f"Party is full. Maximum party size is {MAX_PARTY_SIZE}."]
+            return ActionResult.failure(errors=[f"Party is full. Maximum party size is {MAX_PARTY_SIZE}."])
 
         player_instance_id = self._next_player_instance_id(session)
         try:
@@ -70,16 +66,16 @@ class PreGameState:
                 id, name, description, race, archetype, weapons, player_instance_id,
             )
         except ValueError as exc:
-            return [str(exc)]
+            return ActionResult.failure(errors=[str(exc)])
         session.party.append(player)
-        return self._ok()
+        return ActionResult.success()
 
-    def handle_remove_player(self, session: "GameSession", player_instance_id: str) -> List[str]:
+    def handle_remove_player(self, session: "GameSession", player_instance_id: str) -> ActionResult:
         player_index = self._find_player_index(session, player_instance_id)
         if player_index < 0:
-            return [f"Player '{player_instance_id}' was not found in party."]
+            return ActionResult.failure(errors=[f"Player '{player_instance_id}' was not found in party."])
         del session.party[player_index]
-        return self._ok()
+        return ActionResult.success()
 
     def handle_edit_player(
         self,
@@ -91,10 +87,10 @@ class PreGameState:
         race: Race,
         archetype: Archetype,
         weapons: List[Weapon],
-    ) -> List[str]:
+    ) -> ActionResult:
         player_index = self._find_player_index(session, player_instance_id)
         if player_index < 0:
-            return [f"Player '{player_instance_id}' was not found in party."]
+            return ActionResult.failure(errors=[f"Player '{player_instance_id}' was not found in party."])
 
         try:
             replacement_player: Player = create_player(
@@ -107,14 +103,14 @@ class PreGameState:
                 player_instance_id,
             )
         except ValueError as exc:
-            return [str(exc)]
+            return ActionResult.failure(errors=[str(exc)])
         session.party[player_index] = replacement_player
-        return self._ok()
+        return ActionResult.success()
 
-    def handle_choose_dungeon(self, session: "GameSession", dungeon: Dungeon) -> List[str]:
+    def handle_choose_dungeon(self, session: "GameSession", dungeon: Dungeon) -> ActionResult:
         errors: List[str] = []
         if dungeon is None:
-            return ["Dungeon cannot be None."]
+            return ActionResult.failure(errors=["Dungeon cannot be None."])
         if not dungeon.rooms:
             errors.append("Dungeon must contain at least one room.")
         if not dungeon.start_room:
@@ -124,12 +120,12 @@ class PreGameState:
         if dungeon.end_room and Dungeon.find_room(dungeon, dungeon.end_room) is None:
             errors.append("Dungeon end_room does not exist in dungeon rooms.")
         if errors:
-            return errors
+            return ActionResult.failure(errors=errors)
 
         session.dungeon = dungeon
-        return self._ok()
+        return ActionResult.success()
 
-    def handle_start(self, session: "GameSession") -> List[str]:
+    def handle_start(self, session: "GameSession") -> ActionResult:
         errors: List[str] = []
         if not session.party:
             errors.append("Cannot start game without at least one player in the party.")
@@ -137,24 +133,24 @@ class PreGameState:
             errors.append("Cannot start game without selecting a dungeon.")
 
         if errors:
-            return errors
+            return ActionResult.failure(errors=errors)
 
         start_room = Dungeon.find_room(session.dungeon, session.dungeon.start_room)
         if start_room is None:
-            return ["Cannot start game because dungeon start_room is invalid."]
+            return ActionResult.failure(errors=["Cannot start game because dungeon start_room is invalid."])
 
         session.exploration.current_room = start_room
         if hasattr(session, "transition_to"):
-            transition_errors = session.transition_to(GameState.EXPLORATION)
+            transition_result = session.transition_to(GameState.EXPLORATION)
         else:
             session.state = GameState.EXPLORATION
-            transition_errors = []
-        if transition_errors:
-            return transition_errors
+            transition_result = ActionResult.success()
+        if transition_result.errors:
+            return transition_result
         self.started = True
-        return self._ok()
+        return ActionResult.success()
 
-    def handle_action(self, session: "GameSession", action: Action) -> List[str]:
+    def handle_action(self, session: "GameSession", action: Action) -> ActionResult:
         if action.type not in self.SUPPORTED_ACTIONS:
             return self._unsupported_action(action)
 
@@ -163,7 +159,7 @@ class PreGameState:
 
         validation_errors = validate_action(action)
         if validation_errors:
-            return validation_errors
+            return ActionResult.failure(errors=validation_errors)
 
         if action.type is ActionType.CREATE_PLAYER:
             return self.handle_create_player(
@@ -197,16 +193,12 @@ class PreGameState:
         if action.type is ActionType.CHOOSE_DUNGEON:
             dungeon = action.parameters.get("dungeon")
             if not isinstance(dungeon, Dungeon):
-                return ["Choosing dungeon by id is not implemented yet. Provide a Dungeon object in parameter 'dungeon'."]
+                return ActionResult.failure(
+                    errors=["Choosing dungeon by id is not implemented yet. Provide a Dungeon object in parameter 'dungeon'."]
+                )
             return self.handle_choose_dungeon(session, dungeon)
 
         return self._unsupported_action(action)
-
-    def handle_action_result(self, session: "GameSession", action: Action) -> ActionResult:
-        errors = self.handle_action(session, action)
-        if errors:
-            return ActionResult.failure(errors=errors)
-        return ActionResult.success()
 
     def to_dict(self) -> dict:
         return {

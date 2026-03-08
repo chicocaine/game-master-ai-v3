@@ -89,7 +89,7 @@ def test_handle_create_player_enforces_max_party_size() -> None:
     session = _session()
 
     for index in range(MAX_PARTY_SIZE):
-        errors = pregame.handle_create_player(
+        result = pregame.handle_create_player(
             session,
             id=f"player_{index + 1}",
             name=f"Player {index + 1}",
@@ -98,9 +98,9 @@ def test_handle_create_player_enforces_max_party_size() -> None:
             archetype=_archetype(),
             weapons=[_weapon()],
         )
-        assert errors == []
+        assert result.ok is True
 
-    errors = pregame.handle_create_player(
+    result = pregame.handle_create_player(
         session,
         id="player_overflow",
         name="Overflow",
@@ -109,14 +109,14 @@ def test_handle_create_player_enforces_max_party_size() -> None:
         archetype=_archetype(),
         weapons=[_weapon()],
     )
-    assert errors and "Party is full" in errors[0]
+    assert result.errors and "Party is full" in result.errors[0]
 
 
 def test_handle_remove_and_edit_player_by_instance_id() -> None:
     pregame = PreGameState()
     session = _session()
 
-    errors = pregame.handle_create_player(
+    result = pregame.handle_create_player(
         session,
         id="old_id",
         name="Old Name",
@@ -125,10 +125,10 @@ def test_handle_remove_and_edit_player_by_instance_id() -> None:
         archetype=_archetype(),
         weapons=[_weapon()],
     )
-    assert errors == []
+    assert result.ok is True
     player_instance_id = session.party[0].player_instance_id
 
-    errors = pregame.handle_edit_player(
+    result = pregame.handle_edit_player(
         session,
         player_instance_id=player_instance_id,
         id="new_id",
@@ -138,26 +138,26 @@ def test_handle_remove_and_edit_player_by_instance_id() -> None:
         archetype=_archetype(),
         weapons=[_weapon()],
     )
-    assert errors == []
+    assert result.ok is True
 
     assert session.party[0].id == "new_id"
     assert session.party[0].name == "New Name"
     assert session.party[0].player_instance_id == player_instance_id
 
-    errors = pregame.handle_remove_player(session, player_instance_id)
-    assert errors == []
+    result = pregame.handle_remove_player(session, player_instance_id)
+    assert result.ok is True
     assert session.party == []
 
-    errors = pregame.handle_remove_player(session, player_instance_id)
-    assert errors and "was not found" in errors[0]
+    result = pregame.handle_remove_player(session, player_instance_id)
+    assert result.errors and "was not found" in result.errors[0]
 
 
 def test_handle_choose_dungeon_validates_shape() -> None:
     pregame = PreGameState()
     session = _session()
 
-    errors = pregame.handle_choose_dungeon(session, None)
-    assert errors and "cannot be None" in errors[0]
+    result = pregame.handle_choose_dungeon(session, None)
+    assert result.errors and "cannot be None" in result.errors[0]
 
     invalid = Dungeon(
         id="bad",
@@ -168,12 +168,12 @@ def test_handle_choose_dungeon_validates_shape() -> None:
         end_room="missing",
         rooms=[],
     )
-    errors = pregame.handle_choose_dungeon(session, invalid)
-    assert errors and "at least one room" in errors[0]
+    result = pregame.handle_choose_dungeon(session, invalid)
+    assert result.errors and "at least one room" in result.errors[0]
 
     dungeon = _dungeon()
-    errors = pregame.handle_choose_dungeon(session, dungeon)
-    assert errors == []
+    result = pregame.handle_choose_dungeon(session, dungeon)
+    assert result.ok is True
     assert session.dungeon is dungeon
 
 
@@ -181,11 +181,11 @@ def test_handle_start_moves_session_to_exploration() -> None:
     pregame = PreGameState()
     session = _session()
 
-    errors = pregame.handle_start(session)
-    assert any("without at least one player" in error for error in errors)
-    assert any("without selecting a dungeon" in error for error in errors)
+    result = pregame.handle_start(session)
+    assert any("without at least one player" in error for error in result.errors)
+    assert any("without selecting a dungeon" in error for error in result.errors)
 
-    errors = pregame.handle_create_player(
+    result = pregame.handle_create_player(
         session,
         id="player_1",
         name="Player",
@@ -194,17 +194,17 @@ def test_handle_start_moves_session_to_exploration() -> None:
         archetype=_archetype(),
         weapons=[_weapon()],
     )
-    assert errors == []
+    assert result.ok is True
 
-    errors = pregame.handle_start(session)
-    assert errors and "without selecting a dungeon" in errors[0]
+    result = pregame.handle_start(session)
+    assert result.errors and "without selecting a dungeon" in result.errors[0]
 
     dungeon = _dungeon()
-    errors = pregame.handle_choose_dungeon(session, dungeon)
-    assert errors == []
+    result = pregame.handle_choose_dungeon(session, dungeon)
+    assert result.ok is True
 
-    errors = pregame.handle_start(session)
-    assert errors == []
+    result = pregame.handle_start(session)
+    assert result.ok is True
 
     assert pregame.started is True
     assert session.state is GameState.EXPLORATION
@@ -227,8 +227,8 @@ def test_handle_action_routes_pregame_actions() -> None:
         },
         actor_instance_id="system",
     )
-    errors = pregame.handle_action(session, create_player_action)
-    assert errors == []
+    result = pregame.handle_action(session, create_player_action)
+    assert result.ok is True
     assert len(session.party) == 1
 
     choose_dungeon_action = create_action(
@@ -236,12 +236,12 @@ def test_handle_action_routes_pregame_actions() -> None:
         parameters={"dungeon": _dungeon()},
         actor_instance_id="system",
     )
-    errors = pregame.handle_action(session, choose_dungeon_action)
-    assert errors == []
+    result = pregame.handle_action(session, choose_dungeon_action)
+    assert result.ok is True
 
     start_action = create_action(ActionType.START, parameters={}, actor_instance_id="system")
-    errors = pregame.handle_action(session, start_action)
-    assert errors == []
+    result = pregame.handle_action(session, start_action)
+    assert result.ok is True
     assert session.state is GameState.EXPLORATION
 
 
@@ -253,5 +253,5 @@ def test_handle_action_choose_dungeon_by_id_placeholder_error() -> None:
         parameters={"dungeon_id": "dungeon_1"},
         actor_instance_id="system",
     )
-    errors = pregame.handle_action(session, action)
-    assert errors and "not implemented yet" in errors[0]
+    result = pregame.handle_action(session, action)
+    assert result.errors and "not implemented yet" in result.errors[0]

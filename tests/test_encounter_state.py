@@ -63,7 +63,7 @@ def _session_with_party() -> SimpleNamespace:
         state=GameState.EXPLORATION,
     )
     pregame = PreGameState()
-    errors = pregame.handle_create_player(
+    result = pregame.handle_create_player(
         session,
         id="player_1",
         name="Player",
@@ -72,7 +72,7 @@ def _session_with_party() -> SimpleNamespace:
         archetype=_archetype(),
         weapons=[_weapon()],
     )
-    assert errors == []
+    assert result.ok is True
     return session
 
 
@@ -102,19 +102,19 @@ def test_start_and_advance_turn_placeholder_flow() -> None:
     state = EncounterState()
     encounter = _encounter()
 
-    errors = state.start_encounter(session, encounter)
-    assert errors == []
+    result = state.start_encounter(session, encounter)
+    assert result.ok is True
     assert session.state is GameState.ENCOUNTER
     assert state.current_encounter is encounter
     assert state.turn_order == ["player_1", "enemy_inst_1"]
     assert state.current_turn_index == 0
 
-    errors = state.advance_turn(session)
-    assert errors == []
+    result = state.advance_turn(session)
+    assert result.ok is True
     assert state.current_turn_index == 1
 
-    errors = state.handle_end_turn(session)
-    assert errors == []
+    result = state.handle_end_turn(session)
+    assert result.ok is True
     assert state.current_turn_index == 0
 
 
@@ -122,16 +122,16 @@ def test_placeholder_action_handlers_return_not_implemented() -> None:
     session = _session_with_party()
     state = EncounterState()
 
-    errors = state.handle_attack(session, create_action(ActionType.ATTACK, parameters={}))
-    assert errors and "No active encounter" in errors[0]
+    result = state.handle_attack(session, create_action(ActionType.ATTACK, parameters={}))
+    assert result.errors and "No active encounter" in result.errors[0]
 
-    errors = state.handle_cast_spell(session, create_action(ActionType.CAST_SPELL, parameters={}))
-    assert errors and "No active encounter" in errors[0]
+    result = state.handle_cast_spell(session, create_action(ActionType.CAST_SPELL, parameters={}))
+    assert result.errors and "No active encounter" in result.errors[0]
 
-    errors = state.start_encounter(session, _encounter())
-    assert errors == []
+    result = state.start_encounter(session, _encounter())
+    assert result.ok is True
 
-    errors = state.handle_attack(
+    result = state.handle_attack(
         session,
         create_action(
             ActionType.ATTACK,
@@ -139,9 +139,9 @@ def test_placeholder_action_handlers_return_not_implemented() -> None:
             actor_instance_id="player_1",
         ),
     )
-    assert errors and "not implemented yet" in errors[0]
+    assert result.errors and "not implemented yet" in result.errors[0]
 
-    errors = state.handle_cast_spell(
+    result = state.handle_cast_spell(
         session,
         create_action(
             ActionType.CAST_SPELL,
@@ -149,35 +149,35 @@ def test_placeholder_action_handlers_return_not_implemented() -> None:
             actor_instance_id="player_1",
         ),
     )
-    assert errors and "not implemented yet" in errors[0]
+    assert result.errors and "not implemented yet" in result.errors[0]
 
 
 def test_handle_action_routes_and_validates_turn_owner() -> None:
     session = _session_with_party()
     state = EncounterState()
 
-    errors = state.start_encounter(session, _encounter())
-    assert errors == []
+    result = state.start_encounter(session, _encounter())
+    assert result.ok is True
 
     wrong_actor_attack = create_action(
         ActionType.ATTACK,
         parameters={"attack_id": "attack_1", "target_instance_ids": ["enemy_inst_1"]},
         actor_instance_id="enemy_inst_1",
     )
-    errors = state.handle_action(session, wrong_actor_attack)
-    assert errors and "invalid for current turn" in errors[0]
+    result = state.handle_action(session, wrong_actor_attack)
+    assert result.errors and "invalid for current turn" in result.errors[0]
 
     end_turn = create_action(ActionType.END_TURN, actor_instance_id="player_1")
-    errors = state.handle_action(session, end_turn)
-    assert errors == []
+    result = state.handle_action(session, end_turn)
+    assert result.ok is True
     assert state.current_turn_index == 1
 
     bad_attack_type = create_action(
         ActionType.END_TURN,
         actor_instance_id="enemy_inst_1",
     )
-    errors = state.handle_attack(session, bad_attack_type)
-    assert errors and "Invalid action type" in errors[0]
+    result = state.handle_attack(session, bad_attack_type)
+    assert result.errors and "Invalid action type" in result.errors[0]
 
 
 def test_end_encounter_transitions_back_to_exploration() -> None:
@@ -185,17 +185,33 @@ def test_end_encounter_transitions_back_to_exploration() -> None:
     state = EncounterState()
     encounter = _encounter()
 
-    errors = state.end_encounter(session)
-    assert errors and "No active encounter" in errors[0]
+    result = state.end_encounter(session)
+    assert result.errors and "No active encounter" in result.errors[0]
 
-    errors = state.start_encounter(session, encounter)
-    assert errors == []
+    result = state.start_encounter(session, encounter)
+    assert result.ok is True
 
-    errors = state.end_encounter(session)
-    assert errors == []
+    result = state.end_encounter(session)
+    assert result.ok is True
     assert session.state is GameState.EXPLORATION
     assert state.current_encounter is None
     assert state.turn_order == []
     assert state.current_turn_index == 0
     assert state.post_encounter_summary["encounter_id"] == "enc_1"
     assert encounter.cleared is True
+
+
+def test_result_first_lifecycle_methods() -> None:
+    session = _session_with_party()
+    state = EncounterState()
+
+    result = state.start_encounter(session, _encounter())
+    assert result.ok is True
+    assert session.state is GameState.ENCOUNTER
+
+    result = state.advance_turn(session)
+    assert result.ok is True
+
+    result = state.end_encounter(session)
+    assert result.ok is True
+    assert session.state is GameState.EXPLORATION

@@ -45,23 +45,15 @@ class GameSession:
             return True
         return target_state in ALLOWED_STATE_TRANSITIONS.get(self.state, set())
 
-    def transition_to(self, target_state: GameState) -> List[str]:
-        if self.state is target_state:
-            return []
-        if not self.can_transition_to(target_state):
-            return [
-                f"Invalid state transition from '{self.state.value}' to '{target_state.value}'."
-            ]
-        self.state = target_state
-        return []
-
-    def transition_to_result(self, target_state: GameState) -> ActionResult:
+    def transition_to(self, target_state: GameState) -> ActionResult:
         previous_state = self.state
-        errors = self.transition_to(target_state)
-        if errors:
-            return ActionResult.from_errors(errors)
-        if previous_state is target_state:
+        if self.state is target_state:
             return ActionResult.success()
+        if not self.can_transition_to(target_state):
+            return ActionResult.failure(
+                errors=[f"Invalid state transition from '{self.state.value}' to '{target_state.value}'."]
+            )
+        self.state = target_state
         return ActionResult.success(
             state_changes={
                 "state": {
@@ -71,16 +63,16 @@ class GameSession:
             }
         )
 
-    def handle_action_result(self, action: Action) -> ActionResult:
+    def handle_action(self, action: Action) -> ActionResult:
         before_state = self.state
         if self.state is GameState.PREGAME:
-            result = self.pregame.handle_action_result(self, action)
+            result = self.pregame.handle_action(self, action)
         elif self.state is GameState.EXPLORATION:
-            result = self.exploration.handle_action_result(self, action)
+            result = self.exploration.handle_action(self, action)
         elif self.state is GameState.ENCOUNTER:
-            result = self.encounter.handle_action_result(self, action)
+            result = self.encounter.handle_action(self, action)
         elif self.state is GameState.POSTGAME:
-            result = self.postgame.handle_action_result(self, action)
+            result = self.postgame.handle_action(self, action)
         else:
             result = ActionResult.failure(errors=[f"Unsupported game state '{self.state.value}'."])
 
@@ -97,20 +89,14 @@ class GameSession:
 
         return result
 
-    def handle_action(self, action: Action) -> List[str]:
-        return self.handle_action_result(action).errors
-
-    def start_encounter(self, encounter: Encounter) -> List[str]:
-        return self.start_encounter_result(encounter).errors
-
-    def start_encounter_result(self, encounter: Encounter) -> ActionResult:
+    def start_encounter(self, encounter: Encounter) -> ActionResult:
         before_state = self.state
         if self.state is not GameState.EXPLORATION:
             return ActionResult.failure(errors=["Encounter can only start while in exploration state."])
 
-        errors = self.encounter.start_encounter(self, encounter)
-        if errors:
-            return ActionResult.from_errors(errors)
+        result = self.encounter.start_encounter(self, encounter)
+        if result.errors:
+            return result
         if self.state is before_state:
             return ActionResult.success()
         return ActionResult.success(
@@ -122,10 +108,7 @@ class GameSession:
             }
         )
 
-    def start_room_encounter(self) -> List[str]:
-        return self.start_room_encounter_result().errors
-
-    def start_room_encounter_result(self) -> ActionResult:
+    def start_room_encounter(self) -> ActionResult:
         if self.state is not GameState.EXPLORATION:
             return ActionResult.failure(errors=["Room encounter can only start while in exploration state."])
         if self.exploration.current_room is None:
@@ -133,21 +116,18 @@ class GameSession:
 
         for room_encounter in self.exploration.current_room.encounters:
             if not room_encounter.cleared:
-                return self.start_encounter_result(room_encounter)
+                return self.start_encounter(room_encounter)
 
         return ActionResult.failure(errors=["No uncleared encounters in current room."])
 
-    def end_encounter(self) -> List[str]:
-        return self.end_encounter_result().errors
-
-    def end_encounter_result(self) -> ActionResult:
+    def end_encounter(self) -> ActionResult:
         before_state = self.state
         if self.state is not GameState.ENCOUNTER:
             return ActionResult.failure(errors=["Encounter can only end while in encounter state."])
 
-        errors = self.encounter.end_encounter(self)
-        if errors:
-            return ActionResult.from_errors(errors)
+        result = self.encounter.end_encounter(self)
+        if result.errors:
+            return result
 
         current_room = self.exploration.current_room
         if current_room is not None and current_room.encounters:

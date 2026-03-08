@@ -95,7 +95,7 @@ def _session_with_player_and_dungeon(dungeon: Dungeon) -> SimpleNamespace:
         exploration=ExplorationState(current_room=dungeon.rooms[0]),
     )
     pregame = PreGameState()
-    errors = pregame.handle_create_player(
+    result = pregame.handle_create_player(
         session,
         id="player_1",
         name="Player",
@@ -104,7 +104,7 @@ def _session_with_player_and_dungeon(dungeon: Dungeon) -> SimpleNamespace:
         archetype=_archetype(),
         weapons=[_weapon()],
     )
-    assert errors == []
+    assert result.ok is True
     return session
 
 
@@ -112,16 +112,16 @@ def test_handle_move_requires_cleared_and_connected_room() -> None:
     dungeon = _dungeon()
     session = _session_with_player_and_dungeon(dungeon)
 
-    errors = session.exploration.handle_move(session, "missing")
-    assert errors and "not connected" in errors[0]
+    result = session.exploration.handle_move(session, "missing")
+    assert result.errors and "not connected" in result.errors[0]
 
-    errors = session.exploration.handle_move(session, "room_2")
-    assert errors == []
+    result = session.exploration.handle_move(session, "room_2")
+    assert result.ok is True
     assert session.exploration.current_room.id == "room_2"
     assert session.exploration.current_room.is_visited is True
 
-    errors = session.exploration.handle_move(session, "room_1")
-    assert errors and "not cleared" in errors[0]
+    result = session.exploration.handle_move(session, "room_1")
+    assert result.errors and "not cleared" in result.errors[0]
 
 
 def test_handle_rest_applies_and_blocks_second_rest() -> None:
@@ -131,24 +131,24 @@ def test_handle_rest_applies_and_blocks_second_rest() -> None:
     player.hp = 1
     player.spell_slots = 0
 
-    errors = session.exploration.handle_rest(session, RestType.SHORT)
-    assert errors == []
+    result = session.exploration.handle_rest(session, RestType.SHORT)
+    assert result.ok is True
     assert player.hp > 1
     assert player.spell_slots > 0
 
-    errors = session.exploration.handle_rest(session, RestType.SHORT)
-    assert errors and "already been rested" in errors[0]
+    result = session.exploration.handle_rest(session, RestType.SHORT)
+    assert result.errors and "already been rested" in result.errors[0]
 
 
 def test_handle_rest_rejects_disallowed_rest_type() -> None:
     dungeon = _dungeon()
     session = _session_with_player_and_dungeon(dungeon)
 
-    errors = session.exploration.handle_move(session, "room_2")
-    assert errors == []
+    result = session.exploration.handle_move(session, "room_2")
+    assert result.ok is True
 
-    errors = session.exploration.handle_rest(session, RestType.LONG)
-    assert errors and "not allowed" in errors[0]
+    result = session.exploration.handle_rest(session, RestType.LONG)
+    assert result.errors and "not allowed" in result.errors[0]
 
 
 def test_handle_action_routes_move_and_rest() -> None:
@@ -160,8 +160,8 @@ def test_handle_action_routes_move_and_rest() -> None:
         parameters={"destination_room_id": "room_2"},
         actor_instance_id="player_1",
     )
-    errors = session.exploration.handle_action(session, move_action)
-    assert errors == []
+    result = session.exploration.handle_action(session, move_action)
+    assert result.ok is True
     assert session.exploration.current_room.id == "room_2"
 
     rest_action = create_action(
@@ -169,8 +169,8 @@ def test_handle_action_routes_move_and_rest() -> None:
         parameters={"rest_type": "long"},
         actor_instance_id="player_1",
     )
-    errors = session.exploration.handle_action(session, rest_action)
-    assert errors and "not allowed" in errors[0]
+    result = session.exploration.handle_action(session, rest_action)
+    assert result.errors and "not allowed" in result.errors[0]
 
 
 def test_handle_action_rejects_invalid_rest_type() -> None:
@@ -182,5 +182,5 @@ def test_handle_action_rejects_invalid_rest_type() -> None:
         parameters={"rest_type": "nap"},
         actor_instance_id="player_1",
     )
-    errors = session.exploration.handle_action(session, action)
-    assert errors and "Invalid rest type" in errors[0]
+    result = session.exploration.handle_action(session, action)
+    assert result.errors and "Invalid rest type" in result.errors[0]

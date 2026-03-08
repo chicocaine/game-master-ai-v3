@@ -27,8 +27,20 @@ class EncounterState:
         return []
 
     @staticmethod
-    def _unsupported_action(action: Action) -> List[str]:
-        return [f"Unsupported encounter action type: '{action.type.value}'."]
+    def _unsupported_action_result(action: Action) -> ActionResult:
+        return ActionResult.failure(errors=[f"Unsupported encounter action type: '{action.type.value}'."])
+
+    @staticmethod
+    def _transition_result(session: "GameSession", target_state: GameState) -> ActionResult:
+        if hasattr(session, "transition_to"):
+            transition_result = session.transition_to(target_state)
+            if isinstance(transition_result, ActionResult):
+                return transition_result
+            return ActionResult.from_errors(transition_result)
+        session.state = target_state
+        return ActionResult.success(
+            state_changes={"state": {"to": target_state.value}}
+        )
 
     def _current_actor_instance_id(self) -> str:
         if not self.turn_order:
@@ -52,53 +64,49 @@ class EncounterState:
 
     # properties of encounter
 
-    def start_encounter(self, session: "GameSession", encounter: Encounter) -> List[str]:
+    def start_encounter(self, session: "GameSession", encounter: Encounter) -> ActionResult:
         if encounter is None:
-            return ["Encounter cannot be None."]
+            return ActionResult.failure(errors=["Encounter cannot be None."])
 
         self.current_encounter = encounter
         player_ids = [player.player_instance_id for player in session.party if player.player_instance_id and player.hp > 0]
         enemy_ids = [enemy.enemy_instance_id for enemy in encounter.enemies if enemy.enemy_instance_id and enemy.hp > 0]
         self.turn_order = [*player_ids, *enemy_ids]
         self.current_turn_index = 0
-        if hasattr(session, "transition_to"):
-            return session.transition_to(GameState.ENCOUNTER)
-        
-        session.state = GameState.ENCOUNTER
-        return self._ok()
+        return self._transition_result(session, GameState.ENCOUNTER)
 
-    def handle_attack(self, session: "GameSession", action: Action) -> List[str]:
+    def handle_attack(self, session: "GameSession", action: Action) -> ActionResult:
         if self.current_encounter is None:
-            return ["No active encounter to handle attack."]
+            return ActionResult.failure(errors=["No active encounter to handle attack."])
         if action.type is not ActionType.ATTACK:
-            return ["Invalid action type for attack handler."]
+            return ActionResult.failure(errors=["Invalid action type for attack handler."])
         action_errors = self._validate_action_turn_owner(action)
         if action_errors:
-            return action_errors
-        return ["Attack resolution is not implemented yet."]
+            return ActionResult.failure(errors=action_errors)
+        return ActionResult.failure(errors=["Attack resolution is not implemented yet."])
 
-    def handle_cast_spell(self, session: "GameSession", action: Action) -> List[str]:
+    def handle_cast_spell(self, session: "GameSession", action: Action) -> ActionResult:
         if self.current_encounter is None:
-            return ["No active encounter to handle spell cast."]
+            return ActionResult.failure(errors=["No active encounter to handle spell cast."])
         if action.type is not ActionType.CAST_SPELL:
-            return ["Invalid action type for cast spell handler."]
+            return ActionResult.failure(errors=["Invalid action type for cast spell handler."])
         action_errors = self._validate_action_turn_owner(action)
         if action_errors:
-            return action_errors
-        return ["Spell resolution is not implemented yet."]
+            return ActionResult.failure(errors=action_errors)
+        return ActionResult.failure(errors=["Spell resolution is not implemented yet."])
 
-    def handle_end_turn(self, session: "GameSession", action: Action | None = None) -> List[str]:
+    def handle_end_turn(self, session: "GameSession", action: Action | None = None) -> ActionResult:
         if action is not None:
             if action.type is not ActionType.END_TURN:
-                return ["Invalid action type for end turn handler."]
+                return ActionResult.failure(errors=["Invalid action type for end turn handler."])
             action_errors = self._validate_action_turn_owner(action)
             if action_errors:
-                return action_errors
+                return ActionResult.failure(errors=action_errors)
         return self.advance_turn(session)
 
-    def handle_action(self, session: "GameSession", action: Action) -> List[str]:
+    def handle_action(self, session: "GameSession", action: Action) -> ActionResult:
         if action.type not in self.SUPPORTED_ACTIONS:
-            return self._unsupported_action(action)
+            return self._unsupported_action_result(action)
 
         if action.type is ActionType.ATTACK:
             return self.handle_attack(session, action)
@@ -106,29 +114,23 @@ class EncounterState:
             return self.handle_cast_spell(session, action)
         if action.type is ActionType.END_TURN:
             return self.handle_end_turn(session, action)
-        return self._unsupported_action(action)
+        return self._unsupported_action_result(action)
 
-    def handle_action_result(self, session: "GameSession", action: Action) -> ActionResult:
-        errors = self.handle_action(session, action)
-        if errors:
-            return ActionResult.failure(errors=errors)
-        return ActionResult.success()
-
-    def advance_turn(self, session: "GameSession") -> List[str]:
+    def advance_turn(self, session: "GameSession") -> ActionResult:
         if self.current_encounter is None:
-            return ["No active encounter to advance turn."]
+            return ActionResult.failure(errors=["No active encounter to advance turn."])
         if not self.turn_order:
-            return ["Cannot advance turn because turn order is empty."]
+            return ActionResult.failure(errors=["Cannot advance turn because turn order is empty."])
 
         # check if next actor in turn order is stunned or downed(hp=0), if so, skip turn
         # advance turn
         # validate current actor turn
         self.current_turn_index = (self.current_turn_index + 1) % len(self.turn_order)
-        return self._ok()
+        return ActionResult.success()
 
-    def end_encounter(self, session: "GameSession") -> List[str]:
+    def end_encounter(self, session: "GameSession") -> ActionResult:
         if self.current_encounter is None:
-            return ["No active encounter to end."]
+            return ActionResult.failure(errors=["No active encounter to end."])
 
         self.current_encounter.cleared = True
         self.post_encounter_summary = {
@@ -138,10 +140,7 @@ class EncounterState:
         self.current_encounter = None
         self.turn_order = []
         self.current_turn_index = 0
-        if hasattr(session, "transition_to"):
-            return session.transition_to(GameState.EXPLORATION)
-        session.state = GameState.EXPLORATION
-        return self._ok()
+        return self._transition_result(session, GameState.EXPLORATION)
 
     def to_dict(self) -> dict:
         return {

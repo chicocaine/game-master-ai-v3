@@ -160,20 +160,20 @@ def test_game_session_routes_pregame_actions() -> None:
         },
         actor_instance_id="system",
     )
-    errors = session.handle_action(create_player_action)
-    assert errors == []
+    result = session.handle_action(create_player_action)
+    assert result.ok is True
 
     choose_dungeon_action = create_action(
         ActionType.CHOOSE_DUNGEON,
         parameters={"dungeon": _dungeon()},
         actor_instance_id="system",
     )
-    errors = session.handle_action(choose_dungeon_action)
-    assert errors == []
+    result = session.handle_action(choose_dungeon_action)
+    assert result.ok is True
 
     start_action = create_action(ActionType.START, actor_instance_id="system")
-    errors = session.handle_action(start_action)
-    assert errors == []
+    result = session.handle_action(start_action)
+    assert result.ok is True
     assert session.state is GameState.EXPLORATION
 
 
@@ -201,15 +201,15 @@ def test_game_session_routes_exploration_actions() -> None:
         create_action(ActionType.START, actor_instance_id="system"),
     ]
     for action in setup_actions:
-        assert session.handle_action(action) == []
+        assert session.handle_action(action).ok is True
 
     move_action = create_action(
         ActionType.MOVE,
         parameters={"destination_room_id": "room_2"},
         actor_instance_id="player_1",
     )
-    errors = session.handle_action(move_action)
-    assert errors == []
+    result = session.handle_action(move_action)
+    assert result.ok is True
     assert session.exploration.current_room.id == "room_2"
 
     attack_action = create_action(
@@ -217,8 +217,8 @@ def test_game_session_routes_exploration_actions() -> None:
         parameters={"attack_id": "attack_1", "target_instance_ids": ["enemy_inst_1"]},
         actor_instance_id="player_1",
     )
-    errors = session.handle_action(attack_action)
-    assert errors and "Unsupported exploration action type" in errors[0]
+    result = session.handle_action(attack_action)
+    assert result.errors and "Unsupported exploration action type" in result.errors[0]
 
 
 def test_game_session_routes_encounter_actions() -> None:
@@ -245,29 +245,29 @@ def test_game_session_routes_encounter_actions() -> None:
         create_action(ActionType.START, actor_instance_id="system"),
     ]
     for action in setup_actions:
-        assert session.handle_action(action) == []
+        assert session.handle_action(action).ok is True
 
     encounter = _encounter()
-    assert session.start_encounter(encounter) == []
+    assert session.start_encounter(encounter).ok is True
 
     attack_action = create_action(
         ActionType.ATTACK,
         parameters={"attack_id": "attack_1", "target_instance_ids": ["enemy_inst_1"]},
         actor_instance_id="player_1",
     )
-    errors = session.handle_action(attack_action)
-    assert errors and "not implemented yet" in errors[0]
+    result = session.handle_action(attack_action)
+    assert result.errors and "not implemented yet" in result.errors[0]
 
     end_turn = create_action(ActionType.END_TURN, actor_instance_id="player_1")
-    assert session.handle_action(end_turn) == []
+    assert session.handle_action(end_turn).ok is True
 
 
 def test_game_session_start_and_end_encounter_helpers_validate_state() -> None:
     session = _session()
     encounter = _encounter()
 
-    errors = session.start_encounter(encounter)
-    assert errors and "only start while in exploration" in errors[0]
+    result = session.start_encounter(encounter)
+    assert result.errors and "only start while in exploration" in result.errors[0]
 
     setup_actions = [
         create_action(
@@ -290,16 +290,16 @@ def test_game_session_start_and_end_encounter_helpers_validate_state() -> None:
         create_action(ActionType.START, actor_instance_id="system"),
     ]
     for action in setup_actions:
-        assert session.handle_action(action) == []
+        assert session.handle_action(action).ok is True
 
-    assert session.start_encounter(encounter) == []
+    assert session.start_encounter(encounter).ok is True
     assert session.state is GameState.ENCOUNTER
 
-    assert session.end_encounter() == []
+    assert session.end_encounter().ok is True
     assert session.state is GameState.EXPLORATION
 
-    errors = session.end_encounter()
-    assert errors and "only end while in encounter" in errors[0]
+    result = session.end_encounter()
+    assert result.errors and "only end while in encounter" in result.errors[0]
 
 
 def test_game_session_start_room_encounter_and_room_clear_sync() -> None:
@@ -326,35 +326,35 @@ def test_game_session_start_room_encounter_and_room_clear_sync() -> None:
         create_action(ActionType.START, actor_instance_id="system"),
     ]
     for action in setup_actions:
-        assert session.handle_action(action) == []
+        assert session.handle_action(action).ok is True
 
     assert session.state is GameState.EXPLORATION
     assert session.exploration.current_room is not None
     assert session.exploration.current_room.is_cleared is False
 
-    errors = session.start_room_encounter()
-    assert errors == []
+    result = session.start_room_encounter()
+    assert result.ok is True
     assert session.state is GameState.ENCOUNTER
     assert session.encounter.current_encounter is not None
     assert session.encounter.current_encounter.id == "enc_1"
 
-    errors = session.end_encounter()
-    assert errors == []
+    result = session.end_encounter()
+    assert result.ok is True
     assert session.state is GameState.EXPLORATION
     assert session.exploration.current_room is not None
     assert session.exploration.current_room.is_cleared is True
 
-    errors = session.start_room_encounter()
-    assert errors and "No uncleared encounters" in errors[0]
+    result = session.start_room_encounter()
+    assert result.errors and "No uncleared encounters" in result.errors[0]
 
 
 def test_game_session_transition_matrix_and_postgame_contract() -> None:
     session = _session()
 
-    errors = session.transition_to(GameState.ENCOUNTER)
-    assert errors and "Invalid state transition" in errors[0]
+    result = session.transition_to(GameState.ENCOUNTER)
+    assert result.errors and "Invalid state transition" in result.errors[0]
 
-    assert session.transition_to(GameState.POSTGAME) == []
+    assert session.transition_to(GameState.POSTGAME).ok is True
     assert session.state is GameState.POSTGAME
 
     move_action = create_action(
@@ -362,18 +362,18 @@ def test_game_session_transition_matrix_and_postgame_contract() -> None:
         parameters={"destination_room_id": "room_2"},
         actor_instance_id="player_1",
     )
-    errors = session.handle_action(move_action)
-    assert errors and "Unsupported postgame action type" in errors[0]
+    result = session.handle_action(move_action)
+    assert result.errors and "Unsupported postgame action type" in result.errors[0]
 
     finish_action = create_action(ActionType.FINISH, actor_instance_id="system")
-    errors = session.handle_action(finish_action)
-    assert errors and "not implemented yet" in errors[0]
+    result = session.handle_action(finish_action)
+    assert result.errors and "not implemented yet" in result.errors[0]
 
 
 def test_game_session_result_wrappers_capture_state_changes() -> None:
     session = _session()
 
-    result = session.transition_to_result(GameState.POSTGAME)
+    result = session.transition_to(GameState.POSTGAME)
     assert result.ok is True
     assert result.state_changes["state"]["from"] == "pregame"
     assert result.state_changes["state"]["to"] == "postgame"
@@ -391,17 +391,17 @@ def test_game_session_result_wrappers_capture_state_changes() -> None:
         },
         actor_instance_id="system",
     )
-    assert session.handle_action_result(create_player_action).ok is True
+    assert session.handle_action(create_player_action).ok is True
 
     choose_dungeon_action = create_action(
         ActionType.CHOOSE_DUNGEON,
         parameters={"dungeon": _dungeon()},
         actor_instance_id="system",
     )
-    assert session.handle_action_result(choose_dungeon_action).ok is True
+    assert session.handle_action(choose_dungeon_action).ok is True
 
     start_action = create_action(ActionType.START, actor_instance_id="system")
-    result = session.handle_action_result(start_action)
+    result = session.handle_action(start_action)
     assert result.ok is True
     assert result.state_changes["state"]["from"] == "pregame"
     assert result.state_changes["state"]["to"] == "exploration"
