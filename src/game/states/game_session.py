@@ -1,8 +1,9 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Set
 
-from core.action import Action
+from core.action import Action, validate_action
 from core.action_result import ActionResult
+from core.enums import ActionType, EventType
 
 from game.enums import (
         GameState
@@ -29,6 +30,7 @@ class GameSession:
     state: GameState = GameState.PREGAME
     party: List[Player] = field(default_factory=list)
     dungeon: Dungeon | None = None
+    points: int = 0
     pregame: PreGameState = field(default_factory=PreGameState)
     exploration: ExplorationState = field(default_factory=ExplorationState)
     encounter: EncounterState = field(default_factory=EncounterState)
@@ -64,6 +66,22 @@ class GameSession:
         )
 
     def handle_action(self, action: Action) -> ActionResult:
+        if action.type is ActionType.CONVERSE:
+            validation_errors = validate_action(action)
+            if validation_errors:
+                return ActionResult.failure(errors=validation_errors)
+            return ActionResult.success(
+                events=[
+                    {
+                        "type": EventType.CONVERSE.value,
+                        "actor_instance_id": action.actor_instance_id,
+                        "message": str(action.parameters.get("message", "")),
+                        "raw_input": action.raw_input,
+                        "metadata": dict(action.metadata),
+                    }
+                ]
+            )
+
         before_state = self.state
         if self.state is GameState.PREGAME:
             result = self.pregame.handle_action(self, action)
