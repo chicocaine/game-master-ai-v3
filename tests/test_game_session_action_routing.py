@@ -214,7 +214,7 @@ def test_game_session_routes_exploration_actions() -> None:
 
     attack_action = create_action(
         ActionType.ATTACK,
-        parameters={"attack_id": "attack_1", "target_instance_ids": ["enemy_inst_1"]},
+        parameters={"attack_id": "attack_1", "target_instance_ids": ["enemy_1"]},
         actor_instance_id="player_1",
     )
     result = session.handle_action(attack_action)
@@ -252,11 +252,11 @@ def test_game_session_routes_encounter_actions() -> None:
 
     attack_action = create_action(
         ActionType.ATTACK,
-        parameters={"attack_id": "attack_1", "target_instance_ids": ["enemy_inst_1"]},
+        parameters={"attack_id": "attack_1", "target_instance_ids": ["enemy_1"]},
         actor_instance_id="player_1",
     )
     result = session.handle_action(attack_action)
-    assert result.errors and "not implemented yet" in result.errors[0]
+    assert result.errors and "is not known by actor" in result.errors[0]
 
     end_turn = create_action(ActionType.END_TURN, actor_instance_id="player_1")
     assert session.handle_action(end_turn).ok is True
@@ -297,6 +297,7 @@ def test_game_session_start_and_end_encounter_helpers_validate_state() -> None:
 
     assert session.end_encounter().ok is True
     assert session.state is GameState.EXPLORATION
+    assert session.points == 10
 
     result = session.end_encounter()
     assert result.errors and "only end while in encounter" in result.errors[0]
@@ -343,6 +344,7 @@ def test_game_session_start_room_encounter_and_room_clear_sync() -> None:
     assert session.state is GameState.EXPLORATION
     assert session.exploration.current_room is not None
     assert session.exploration.current_room.is_cleared is True
+    assert session.points == 10
 
     result = session.start_room_encounter()
     assert result.errors and "No uncleared encounters" in result.errors[0]
@@ -405,3 +407,26 @@ def test_game_session_result_wrappers_capture_state_changes() -> None:
     assert result.ok is True
     assert result.state_changes["state"]["from"] == "pregame"
     assert result.state_changes["state"]["to"] == "exploration"
+
+
+def test_game_session_handles_converse_action() -> None:
+    session = _session()
+
+    result = session.handle_action(
+        create_action(
+            ActionType.CONVERSE,
+            parameters={"message": "Can I inspect the room?"},
+            actor_instance_id="player_1",
+        )
+    )
+    assert result.ok is True
+    assert result.events and result.events[0]["type"] == "converse"
+
+    result = session.handle_action(
+        create_action(
+            ActionType.CONVERSE,
+            parameters={"message": "   "},
+            actor_instance_id="player_1",
+        )
+    )
+    assert any("cannot be blank" in error for error in result.errors)
