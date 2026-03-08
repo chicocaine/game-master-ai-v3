@@ -2,7 +2,7 @@ from enum import Enum
 
 class ActionType(Enum):
     ABANDON = "abandon"
-    INTERACT = "interact"
+    CONVERSE = "converse"
 
     MOVE = "move"
     REST = "rest"
@@ -28,8 +28,7 @@ class EventType(Enum):
     TURN_SKIPPED = "turn_skipped"
 
     NARRATION = "narration"
-    QUERY = "query"
-    CONVERSE = "query"
+    CONVERSE = "converse"
     SYSTEM_MESSAGE = "system_message"
     PLAYER_MESSAGE = "player_message"
     ERROR = "error"
