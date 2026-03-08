@@ -1,8 +1,7 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import Dict, List, Set
 
 from core.action import Action
-from core.enums import ActionType
 
 from game.enums import (
         GameState
@@ -14,6 +13,14 @@ from game.states.pregame import PreGameState
 from game.states.encounter import EncounterState
 from game.states.exploration import ExplorationState
 from game.states.postgame import PostGameState
+
+
+ALLOWED_STATE_TRANSITIONS: Dict[GameState, Set[GameState]] = {
+    GameState.PREGAME: {GameState.EXPLORATION, GameState.POSTGAME},
+    GameState.EXPLORATION: {GameState.ENCOUNTER, GameState.POSTGAME},
+    GameState.ENCOUNTER: {GameState.EXPLORATION, GameState.POSTGAME},
+    GameState.POSTGAME: set(),
+}
 
 
 @dataclass
@@ -32,26 +39,33 @@ class GameSession:
     def alive_enemies(encounter: Encounter) -> List[Enemy]:
          return [enemy for enemy in encounter.enemies if enemy.hp > 0]
 
+    def can_transition_to(self, target_state: GameState) -> bool:
+        if self.state is target_state:
+            return True
+        return target_state in ALLOWED_STATE_TRANSITIONS.get(self.state, set())
+
+    def transition_to(self, target_state: GameState) -> List[str]:
+        if self.state is target_state:
+            return []
+        if not self.can_transition_to(target_state):
+            return [
+                f"Invalid state transition from '{self.state.value}' to '{target_state.value}'."
+            ]
+        self.state = target_state
+        return []
+
     def handle_action(self, action: Action) -> List[str]:
         if self.state is GameState.PREGAME:
             return self.pregame.handle_action(self, action)
 
         if self.state is GameState.EXPLORATION:
-            if action.type in {ActionType.MOVE, ActionType.REST}:
-                return self.exploration.handle_action(self, action)
-            if action.type in {ActionType.ATTACK, ActionType.CAST_SPELL, ActionType.END_TURN}:
-                if self.encounter.current_encounter is None:
-                    return ["Cannot process encounter action outside an active encounter."]
-                return self.encounter.handle_action(self, action)
-            return [f"Unsupported exploration action type: '{action.type.value}'."]
+            return self.exploration.handle_action(self, action)
 
         if self.state is GameState.ENCOUNTER:
-            if action.type in {ActionType.ATTACK, ActionType.CAST_SPELL, ActionType.END_TURN}:
-                return self.encounter.handle_action(self, action)
-            return [f"Unsupported encounter action type: '{action.type.value}'."]
+            return self.encounter.handle_action(self, action)
 
         if self.state is GameState.POSTGAME:
-            return ["Postgame action handling is not implemented yet."]
+            return self.postgame.handle_action(self, action)
 
         return [f"Unsupported game state '{self.state.value}'."]
 

@@ -13,10 +13,18 @@ if TYPE_CHECKING:
 @dataclass
 class ExplorationState:
     current_room: Room | None = None
+    SUPPORTED_ACTIONS = {
+        ActionType.MOVE,
+        ActionType.REST,
+    }
 
     @staticmethod
     def _ok() -> List[str]:
         return []
+
+    @staticmethod
+    def _unsupported_action(action: Action) -> List[str]:
+        return [f"Unsupported exploration action type: '{action.type.value}'."]
 
     @property
     def can_rest(self) -> bool:
@@ -68,6 +76,9 @@ class ExplorationState:
         return self._ok()
 
     def handle_action(self, session: "GameSession", action: Action) -> List[str]:
+        if action.type not in self.SUPPORTED_ACTIONS:
+            return self._unsupported_action(action)
+
         validation_errors = validate_action(action)
         if validation_errors:
             return validation_errors
@@ -86,7 +97,7 @@ class ExplorationState:
                 return ["Invalid rest type."]
             return self.handle_rest(session, rest_type)
 
-        return [f"Unsupported exploration action type: '{action.type.value}'."]
+        return self._unsupported_action(action)
 
     def to_dict(self) -> dict:
         return {

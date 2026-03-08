@@ -218,7 +218,7 @@ def test_game_session_routes_exploration_actions() -> None:
         actor_instance_id="player_1",
     )
     errors = session.handle_action(attack_action)
-    assert errors and "outside an active encounter" in errors[0]
+    assert errors and "Unsupported exploration action type" in errors[0]
 
 
 def test_game_session_routes_encounter_actions() -> None:
@@ -346,3 +346,25 @@ def test_game_session_start_room_encounter_and_room_clear_sync() -> None:
 
     errors = session.start_room_encounter()
     assert errors and "No uncleared encounters" in errors[0]
+
+
+def test_game_session_transition_matrix_and_postgame_contract() -> None:
+    session = _session()
+
+    errors = session.transition_to(GameState.ENCOUNTER)
+    assert errors and "Invalid state transition" in errors[0]
+
+    assert session.transition_to(GameState.POSTGAME) == []
+    assert session.state is GameState.POSTGAME
+
+    move_action = create_action(
+        ActionType.MOVE,
+        parameters={"destination_room_id": "room_2"},
+        actor_instance_id="player_1",
+    )
+    errors = session.handle_action(move_action)
+    assert errors and "Unsupported postgame action type" in errors[0]
+
+    finish_action = create_action(ActionType.FINISH, actor_instance_id="system")
+    errors = session.handle_action(finish_action)
+    assert errors and "not implemented yet" in errors[0]

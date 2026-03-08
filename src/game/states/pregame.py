@@ -21,10 +21,21 @@ MAX_PARTY_SIZE = 4
 @dataclass
 class PreGameState:
     started: bool = False
+    SUPPORTED_ACTIONS = {
+        ActionType.START,
+        ActionType.CREATE_PLAYER,
+        ActionType.REMOVE_PLAYER,
+        ActionType.EDIT_PLAYER,
+        ActionType.CHOOSE_DUNGEON,
+    }
 
     @staticmethod
     def _ok() -> List[str]:
         return []
+
+    @staticmethod
+    def _unsupported_action(action: Action) -> List[str]:
+        return [f"Unsupported pregame action type: '{action.type.value}'."]
 
     def _next_player_instance_id(self, session: "GameSession") -> str:
         used_ids = {player.player_instance_id for player in session.party if player.player_instance_id}
@@ -132,11 +143,20 @@ class PreGameState:
             return ["Cannot start game because dungeon start_room is invalid."]
 
         session.exploration.current_room = start_room
-        session.state = GameState.EXPLORATION
+        if hasattr(session, "transition_to"):
+            transition_errors = session.transition_to(GameState.EXPLORATION)
+        else:
+            session.state = GameState.EXPLORATION
+            transition_errors = []
+        if transition_errors:
+            return transition_errors
         self.started = True
         return self._ok()
 
     def handle_action(self, session: "GameSession", action: Action) -> List[str]:
+        if action.type not in self.SUPPORTED_ACTIONS:
+            return self._unsupported_action(action)
+
         if action.type is ActionType.START:
             return self.handle_start(session)
 
@@ -179,7 +199,7 @@ class PreGameState:
                 return ["Choosing dungeon by id is not implemented yet. Provide a Dungeon object in parameter 'dungeon'."]
             return self.handle_choose_dungeon(session, dungeon)
 
-        return [f"Unsupported pregame action type: '{action.type.value}'."]
+        return self._unsupported_action(action)
 
     def to_dict(self) -> dict:
         return {

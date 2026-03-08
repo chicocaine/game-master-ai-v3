@@ -15,10 +15,19 @@ class EncounterState:
     turn_order: List[str] = field(default_factory=list)  # actor instance ids
     current_turn_index: int = 0
     post_encounter_summary: Dict[str, Any] = field(default_factory=dict)
+    SUPPORTED_ACTIONS = {
+        ActionType.ATTACK,
+        ActionType.CAST_SPELL,
+        ActionType.END_TURN,
+    }
 
     @staticmethod
     def _ok() -> List[str]:
         return []
+
+    @staticmethod
+    def _unsupported_action(action: Action) -> List[str]:
+        return [f"Unsupported encounter action type: '{action.type.value}'."]
 
     def _current_actor_instance_id(self) -> str:
         if not self.turn_order:
@@ -51,6 +60,9 @@ class EncounterState:
         enemy_ids = [enemy.enemy_instance_id for enemy in encounter.enemies if enemy.enemy_instance_id and enemy.hp > 0]
         self.turn_order = [*player_ids, *enemy_ids]
         self.current_turn_index = 0
+        if hasattr(session, "transition_to"):
+            return session.transition_to(GameState.ENCOUNTER)
+        
         session.state = GameState.ENCOUNTER
         return self._ok()
 
@@ -84,13 +96,16 @@ class EncounterState:
         return self.advance_turn(session)
 
     def handle_action(self, session: "GameSession", action: Action) -> List[str]:
+        if action.type not in self.SUPPORTED_ACTIONS:
+            return self._unsupported_action(action)
+
         if action.type is ActionType.ATTACK:
             return self.handle_attack(session, action)
         if action.type is ActionType.CAST_SPELL:
             return self.handle_cast_spell(session, action)
         if action.type is ActionType.END_TURN:
             return self.handle_end_turn(session, action)
-        return [f"Unsupported encounter action type: '{action.type.value}'."]
+        return self._unsupported_action(action)
 
     def advance_turn(self, session: "GameSession") -> List[str]:
         if self.current_encounter is None:
@@ -116,6 +131,8 @@ class EncounterState:
         self.current_encounter = None
         self.turn_order = []
         self.current_turn_index = 0
+        if hasattr(session, "transition_to"):
+            return session.transition_to(GameState.EXPLORATION)
         session.state = GameState.EXPLORATION
         return self._ok()
 
