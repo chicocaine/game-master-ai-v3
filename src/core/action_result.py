@@ -44,3 +44,14 @@ class ActionResult:
             events=list(events or []),
             state_changes=dict(state_changes or {}),
         )
+
+    @classmethod
+    def from_errors(
+        cls,
+        errors: List[str],
+        events: List[Dict[str, Any]] | None = None,
+        state_changes: Dict[str, Any] | None = None,
+    ) -> "ActionResult":
+        if errors:
+            return cls.failure(errors=errors, events=events, state_changes=state_changes)
+        return cls.success(events=events, state_changes=state_changes)

@@ -59,7 +59,7 @@ class GameSession:
         previous_state = self.state
         errors = self.transition_to(target_state)
         if errors:
-            return ActionResult.failure(errors=errors)
+            return ActionResult.from_errors(errors)
         if previous_state is target_state:
             return ActionResult.success()
         return ActionResult.success(
@@ -101,15 +101,16 @@ class GameSession:
         return self.handle_action_result(action).errors
 
     def start_encounter(self, encounter: Encounter) -> List[str]:
-        if self.state is not GameState.EXPLORATION:
-            return ["Encounter can only start while in exploration state."]
-        return self.encounter.start_encounter(self, encounter)
+        return self.start_encounter_result(encounter).errors
 
     def start_encounter_result(self, encounter: Encounter) -> ActionResult:
         before_state = self.state
-        errors = self.start_encounter(encounter)
+        if self.state is not GameState.EXPLORATION:
+            return ActionResult.failure(errors=["Encounter can only start while in exploration state."])
+
+        errors = self.encounter.start_encounter(self, encounter)
         if errors:
-            return ActionResult.failure(errors=errors)
+            return ActionResult.from_errors(errors)
         if self.state is before_state:
             return ActionResult.success()
         return ActionResult.success(
@@ -122,51 +123,36 @@ class GameSession:
         )
 
     def start_room_encounter(self) -> List[str]:
+        return self.start_room_encounter_result().errors
+
+    def start_room_encounter_result(self) -> ActionResult:
         if self.state is not GameState.EXPLORATION:
-            return ["Room encounter can only start while in exploration state."]
+            return ActionResult.failure(errors=["Room encounter can only start while in exploration state."])
         if self.exploration.current_room is None:
-            return ["Cannot start room encounter without a current room."]
+            return ActionResult.failure(errors=["Cannot start room encounter without a current room."])
 
         for room_encounter in self.exploration.current_room.encounters:
             if not room_encounter.cleared:
-                return self.start_encounter(room_encounter)
+                return self.start_encounter_result(room_encounter)
 
-        return ["No uncleared encounters in current room."]
-
-    def start_room_encounter_result(self) -> ActionResult:
-        before_state = self.state
-        errors = self.start_room_encounter()
-        if errors:
-            return ActionResult.failure(errors=errors)
-        if self.state is before_state:
-            return ActionResult.success()
-        return ActionResult.success(
-            state_changes={
-                "state": {
-                    "from": before_state.value,
-                    "to": self.state.value,
-                }
-            }
-        )
+        return ActionResult.failure(errors=["No uncleared encounters in current room."])
 
     def end_encounter(self) -> List[str]:
+        return self.end_encounter_result().errors
+
+    def end_encounter_result(self) -> ActionResult:
+        before_state = self.state
         if self.state is not GameState.ENCOUNTER:
-            return ["Encounter can only end while in encounter state."]
+            return ActionResult.failure(errors=["Encounter can only end while in encounter state."])
+
         errors = self.encounter.end_encounter(self)
         if errors:
-            return errors
+            return ActionResult.from_errors(errors)
 
         current_room = self.exploration.current_room
         if current_room is not None and current_room.encounters:
             current_room.is_cleared = all(room_encounter.cleared for room_encounter in current_room.encounters)
 
-        return []
-
-    def end_encounter_result(self) -> ActionResult:
-        before_state = self.state
-        errors = self.end_encounter()
-        if errors:
-            return ActionResult.failure(errors=errors)
         if self.state is before_state:
             return ActionResult.success()
         return ActionResult.success(
