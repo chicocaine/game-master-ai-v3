@@ -139,7 +139,7 @@ def _overwrite_key(effect: StatusEffect) -> Tuple[str, ...] | None:
 	if effect_type is StatusEffectType.ATKMOD:
 		return (effect_type.value,)
 	if effect_type is StatusEffectType.ACMOD:
-		return None
+		return (effect_type.value,)
 	if effect_type in (StatusEffectType.DOT, StatusEffectType.HOT):
 		return (effect_type.value, _primary_damage_type(effect).value)
 	if effect_type is StatusEffectType.CONTROL:

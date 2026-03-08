@@ -553,7 +553,9 @@ def test_status_effect_overwrite_and_stack_rules() -> None:
     )
     assert result.ok is True
     enemy_effects = encounter.enemies[0].active_status_effects
-    assert len([e for e in enemy_effects if e.status_effect.type is StatusEffectType.ACMOD]) == 2
+    acmods = [e for e in enemy_effects if e.status_effect.type is StatusEffectType.ACMOD]
+    assert len(acmods) == 1
+    assert acmods[0].status_effect.id == "ac_mod_b"
 
 
 def test_end_turn_ticks_dot_and_hot_and_decrements_duration() -> None:
