@@ -2,8 +2,7 @@ from enum import Enum
 
 class ActionType(Enum):
     ABANDON = "abandon"
-    QUERY = "query"
-    CONVERSE = "converse"
+    INTERACT = "interact"
 
     MOVE = "move"
     REST = "rest"
