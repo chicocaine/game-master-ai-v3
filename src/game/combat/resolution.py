@@ -10,7 +10,14 @@ from core.enums import EventType
 
 from game.util.dice import roll_dice, roll_save_throw
 from game.enums import AttackType, SpellType, ControlType, DamageType, StatusEffectType
-from game.combat.status_effect import StatusEffectInstance
+from game.combat.status_effect import (
+    StatusEffectInstance,
+    apply_status_effect_instances,
+    merged_control_immunities_from_effects,
+    merged_damage_affinities_from_effects,
+    total_ac_modifier_from_effects,
+    total_attack_modifier_from_effects,
+)
 from game.combat.attack import Attack
 from game.combat.spell import Spell
 
@@ -106,28 +113,47 @@ def _apply_heal(target: Any, amount: int) -> int:
 def _apply_status_effects(target: Any, effects: List[StatusEffectInstance]) -> int:
     if not effects:
         return 0
-    applied = 0
-    for effect in effects:
-        target.active_status_effects.append(effect)
-        applied += 1
-    return applied
+    return apply_status_effect_instances(target.active_status_effects, effects)
+
+
+def _can_apply_status_effect(target: Any, effect_instance: StatusEffectInstance) -> bool:
+    effect = effect_instance.status_effect
+    if effect.type is not StatusEffectType.CONTROL:
+        return True
+    control_immunities = set(getattr(target, "merged_cc_immunities", []))
+    control_immunities.update(merged_control_immunities_from_effects(getattr(target, "active_status_effects", [])))
+    return effect.control_type not in control_immunities
+
+
+def _filter_applicable_status_effects(target: Any, effects: List[StatusEffectInstance]) -> List[StatusEffectInstance]:
+    return [effect for effect in effects if _can_apply_status_effect(target, effect)]
 
 
 def _cleanse_status_effects(target: Any, spell: Spell) -> int:
     active_effects = list(getattr(target, "active_status_effects", []))
     if not active_effects:
         return 0
-    cleanse_ids = {effect.status_effect.id for effect in spell.applied_status_effects}
-    if not cleanse_ids:
+    cleanse_types = set(spell.cleanse_status_effect_types)
+    cleanse_control_types = set(spell.cleanse_control_types)
+
+    def _should_remove(effect_instance: StatusEffectInstance) -> bool:
+        status_effect = effect_instance.status_effect
+        if status_effect.type in cleanse_types:
+            return True
+        if (
+            status_effect.type is StatusEffectType.CONTROL
+            and status_effect.control_type in cleanse_control_types
+        ):
+            return True
+        return False
+
+    if not cleanse_types and not cleanse_control_types:
         remaining = [
             effect for effect in active_effects
             if effect.status_effect.type is not StatusEffectType.CONTROL
         ]
     else:
-        remaining = [
-            effect for effect in active_effects
-            if effect.status_effect.id not in cleanse_ids
-        ]
+        remaining = [effect for effect in active_effects if not _should_remove(effect)]
     removed_count = len(active_effects) - len(remaining)
     target.active_status_effects = remaining
     return removed_count
@@ -164,11 +190,14 @@ def _damage_amount_for_attack(attack, target) -> int:
     base_damage = max(0, raw_damage)
     damage_types = attack.damage_types or [DamageType.FORCE]
     primary_damage_type = damage_types[0]
+    extra_immunities, extra_resistances, extra_vulnerabilities = merged_damage_affinities_from_effects(
+        getattr(target, "active_status_effects", [])
+    )
     multiplier = calculate_damage_multiplier(
         primary_damage_type,
-        target.merged_immunities,
-        target.merged_resistances,
-        target.merged_vulnerabilities,
+        sorted(list(set(target.merged_immunities + extra_immunities)), key=lambda x: x.value),
+        sorted(list(set(target.merged_resistances + extra_resistances)), key=lambda x: x.value),
+        sorted(list(set(target.merged_vulnerabilities + extra_vulnerabilities)), key=lambda x: x.value),
     )
     return max(0, math.floor(base_damage * multiplier))
 
@@ -178,11 +207,14 @@ def _damage_amount_for_spell(spell, target) -> int:
     base_damage = max(0, raw_damage)
     damage_types = spell.damage_types or [DamageType.FORCE]
     primary_damage_type = damage_types[0]
+    extra_immunities, extra_resistances, extra_vulnerabilities = merged_damage_affinities_from_effects(
+        getattr(target, "active_status_effects", [])
+    )
     multiplier = calculate_damage_multiplier(
         primary_damage_type,
-        target.merged_immunities,
-        target.merged_resistances,
-        target.merged_vulnerabilities,
+        sorted(list(set(target.merged_immunities + extra_immunities)), key=lambda x: x.value),
+        sorted(list(set(target.merged_resistances + extra_resistances)), key=lambda x: x.value),
+        sorted(list(set(target.merged_vulnerabilities + extra_vulnerabilities)), key=lambda x: x.value),
     )
     return max(0, math.floor(base_damage * multiplier))
 
@@ -226,9 +258,23 @@ def _heal_amount_for_spell(spell: Spell) -> int:
 
 
 def _did_hit_target(actor: Any, target: Any, hit_modifiers: int, dc: int) -> bool:
+    actor_effect_attack_modifier = total_attack_modifier_from_effects(
+        getattr(actor, "active_status_effects", [])
+    )
+    target_effect_ac_modifier = total_ac_modifier_from_effects(
+        getattr(target, "active_status_effects", [])
+    )
+    effective_target_ac = max(0, getattr(target, "effective_ac", 0) + target_effect_ac_modifier)
+
     if dc > 0:
         return roll_save_throw() + getattr(target, "initiative_mod", 0) < dc
-    return roll_save_throw() + hit_modifiers + getattr(actor, "merged_attack_modifier", 0) >= getattr(target, "effective_ac", 0)
+    return (
+        roll_save_throw()
+        + hit_modifiers
+        + getattr(actor, "merged_attack_modifier", 0)
+        + actor_effect_attack_modifier
+        >= effective_target_ac
+    )
 
 
 def resolve_attack_action(session: "GameSession", encounter: Any, action: Action) -> ActionResult:
@@ -276,7 +322,8 @@ def resolve_attack_action(session: "GameSession", encounter: Any, action: Action
 
         damage = _damage_amount_for_attack(attack, target)
         applied_damage = _apply_damage(target, damage)
-        applied_effect_count = _apply_status_effects(target, attack.applied_status_effects)
+        applicable_effects = _filter_applicable_status_effects(target, attack.applied_status_effects)
+        applied_effect_count = _apply_status_effects(target, applicable_effects)
 
         events.append({
             "type": EventType.DAMAGE_APPLIED.value,
@@ -369,7 +416,8 @@ def resolve_cast_spell_action(session: "GameSession", encounter: Any, action: Ac
                     "source_id": spell.id,
                 })
         elif _is_status_only_spell(spell.type):
-            applied_effect_count = _apply_status_effects(target, spell.applied_status_effects)
+            applicable_effects = _filter_applicable_status_effects(target, spell.applied_status_effects)
+            applied_effect_count = _apply_status_effects(target, applicable_effects)
             if applied_effect_count > 0:
                 events.append({
                     "type": EventType.STATUS_EFFECT_APPLIED.value,
@@ -390,7 +438,8 @@ def resolve_cast_spell_action(session: "GameSession", encounter: Any, action: Ac
                     "source": "spell",
                     "source_id": spell.id,
                 })
-                applied_effect_count = _apply_status_effects(target, spell.applied_status_effects)
+                applicable_effects = _filter_applicable_status_effects(target, spell.applied_status_effects)
+                applied_effect_count = _apply_status_effects(target, applicable_effects)
                 if applied_effect_count > 0:
                     events.append({
                         "type": EventType.STATUS_EFFECT_APPLIED.value,

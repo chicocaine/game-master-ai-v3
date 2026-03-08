@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
-from game.enums import SpellType, DamageType
+from game.enums import SpellType, DamageType, StatusEffectType, ControlType
 from game.combat.status_effect import StatusEffectInstance
 
 
@@ -29,6 +29,30 @@ def _parse_applied_status_effects(value: Any) -> List[StatusEffectInstance]:
 	if not isinstance(value, list):
 		return []
 	return [StatusEffectInstance.from_dict(item) for item in value]
+
+
+def _parse_status_effect_type(value: Any) -> StatusEffectType:
+    if isinstance(value, StatusEffectType):
+        return value
+    return StatusEffectType(str(value))
+
+
+def _parse_status_effect_types(value: Any) -> List[StatusEffectType]:
+    if not isinstance(value, list):
+        return []
+    return [_parse_status_effect_type(item) for item in value]
+
+
+def _parse_control_type(value: Any) -> ControlType:
+    if isinstance(value, ControlType):
+        return value
+    return ControlType(str(value))
+
+
+def _parse_control_types(value: Any) -> List[ControlType]:
+    if not isinstance(value, list):
+        return []
+    return [_parse_control_type(item) for item in value]
     
 def _get_str(data: dict, key: str) -> str:
 	return str(data.get(key, ""))
@@ -73,6 +97,14 @@ class Spell:
     def applied_status_effects(self) -> List[StatusEffectInstance]:
         return _parse_applied_status_effects(self.parameters.get("applied_status_effects", []))
 	
+    @property
+    def cleanse_status_effect_types(self) -> List[StatusEffectType]:
+        return _parse_status_effect_types(self.parameters.get("cleanse_status_effect_types", []))
+
+    @property
+    def cleanse_control_types(self) -> List[ControlType]:
+        return _parse_control_types(self.parameters.get("cleanse_control_types", []))
+		
 
     def to_dict(self) -> dict:
         return {
