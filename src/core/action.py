@@ -18,6 +18,12 @@ def _get_dict(data: dict, key: str) -> Dict[str, Any]:
 
 def _normalize_action_parameters(action_type: ActionType, parameters: Dict[str, Any]) -> Dict[str, Any]:
 	normalized = dict(parameters)
+	if action_type == ActionType.CONVERSE:
+		if "message" not in normalized and "question" in normalized:
+			normalized["message"] = normalized["question"]
+		if "message" in normalized:
+			normalized["message"] = str(normalized["message"]).strip()
+
 	if action_type == ActionType.ATTACK:
 		if "target_instance_ids" not in normalized and "target_instance_id" in normalized:
 			normalized["target_instance_ids"] = normalized["target_instance_id"]
@@ -42,9 +48,13 @@ def _normalize_action_parameters(action_type: ActionType, parameters: Dict[str, 
 		if "dungeon" not in normalized and "dungeon_id" in normalized:
 			normalized["dungeon"] = normalized["dungeon_id"]
 
-	if action_type == ActionType.CONVERSE and "message" in normalized:
-		normalized["message"] = str(normalized["message"]).strip()
 	return normalized
+
+
+def _parse_action_type(raw_value: str) -> ActionType:
+	if raw_value in ("query", "interact", "converse"):
+		return ActionType.CONVERSE
+	return ActionType(raw_value)
 
 
 @dataclass
@@ -70,7 +80,7 @@ class Action:
 
 	@classmethod
 	def from_dict(cls, data: dict) -> "Action":
-		action_type = ActionType(_get_str(data, "type"))
+		action_type = _parse_action_type(_get_str(data, "type"))
 		parameters = _normalize_action_parameters(action_type, _get_dict(data, "parameters"))
 		return cls(
 			type=action_type,
@@ -85,7 +95,6 @@ class Action:
 
 REQUIRED_PARAMETERS: Dict[ActionType, List[str]] = {
 	ActionType.ABANDON: [],
-	ActionType.QUERY: ["question"],
 	ActionType.CONVERSE: ["message"],
 	ActionType.MOVE: ["destination_room_id"],
 	ActionType.REST: ["rest_type"],
