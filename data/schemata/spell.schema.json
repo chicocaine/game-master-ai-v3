@@ -36,6 +36,32 @@
 				"type": "object",
 				"additionalProperties": false,
 				"properties": {
+					"cleanse_status_effect_types": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"enum": [
+								"attack_modifier",
+								"ac_modifier",
+								"DoT",
+								"HoT",
+								"control",
+								"cc_immunity",
+								"immunity",
+								"resistance",
+								"vulnerable"
+							]
+						},
+						"uniqueItems": true
+					},
+					"cleanse_control_types": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"enum": ["stunned", "asleep", "restrained", "silenced"]
+						},
+						"uniqueItems": true
+					},
 					"damage_types": {
 						"type": "array",
 						"items": {

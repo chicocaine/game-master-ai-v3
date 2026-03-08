@@ -49,5 +49,16 @@
 				}
 			]
 		}
+	},
+	{
+		"id": "spl_purify_mind",
+		"name": "Purify Mind",
+		"description": "Cleanse control effects from a target.",
+		"type": "cleanse",
+		"spell_cost": 1,
+		"parameters": {
+			"cleanse_status_effect_types": ["control"],
+			"cleanse_control_types": ["stunned", "asleep", "restrained", "silenced"]
+		}
 	}
 ]
