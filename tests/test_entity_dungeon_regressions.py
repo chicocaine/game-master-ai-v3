@@ -1,7 +1,7 @@
 from game.actors.enemy import Enemy
 from game.actors.player import Player
-from game.combat_elements.attack import Attack
-from game.combat_elements.spell import Spell
+from game.combat.attack import Attack
+from game.combat.spell import Spell
 from game.dungeons.dungeon import Encounter
 from game.entity.entity import Entity
 from game.entity.blocks.archetype import Archetype, WeaponConstraints
