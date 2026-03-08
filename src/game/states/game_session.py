@@ -60,9 +60,29 @@ class GameSession:
             return ["Encounter can only start while in exploration state."]
         return self.encounter.start_encounter(self, encounter)
 
+    def start_room_encounter(self) -> List[str]:
+        if self.state is not GameState.EXPLORATION:
+            return ["Room encounter can only start while in exploration state."]
+        if self.exploration.current_room is None:
+            return ["Cannot start room encounter without a current room."]
+
+        for room_encounter in self.exploration.current_room.encounters:
+            if not room_encounter.cleared:
+                return self.start_encounter(room_encounter)
+
+        return ["No uncleared encounters in current room."]
+
     def end_encounter(self) -> List[str]:
         if self.state is not GameState.ENCOUNTER:
             return ["Encounter can only end while in encounter state."]
-        return self.encounter.end_encounter(self)
+        errors = self.encounter.end_encounter(self)
+        if errors:
+            return errors
+
+        current_room = self.exploration.current_room
+        if current_room is not None and current_room.encounters:
+            current_room.is_cleared = all(room_encounter.cleared for room_encounter in current_room.encounters)
+
+        return []
 
     # serialize and deserialize functions 
