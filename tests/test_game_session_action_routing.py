@@ -368,3 +368,40 @@ def test_game_session_transition_matrix_and_postgame_contract() -> None:
     finish_action = create_action(ActionType.FINISH, actor_instance_id="system")
     errors = session.handle_action(finish_action)
     assert errors and "not implemented yet" in errors[0]
+
+
+def test_game_session_result_wrappers_capture_state_changes() -> None:
+    session = _session()
+
+    result = session.transition_to_result(GameState.POSTGAME)
+    assert result.ok is True
+    assert result.state_changes["state"]["from"] == "pregame"
+    assert result.state_changes["state"]["to"] == "postgame"
+
+    session = _session()
+    create_player_action = create_action(
+        ActionType.CREATE_PLAYER,
+        parameters={
+            "id": "player_1",
+            "name": "Player",
+            "description": "Recruit",
+            "race": _race(),
+            "archetype": _archetype(),
+            "weapons": [_weapon()],
+        },
+        actor_instance_id="system",
+    )
+    assert session.handle_action_result(create_player_action).ok is True
+
+    choose_dungeon_action = create_action(
+        ActionType.CHOOSE_DUNGEON,
+        parameters={"dungeon": _dungeon()},
+        actor_instance_id="system",
+    )
+    assert session.handle_action_result(choose_dungeon_action).ok is True
+
+    start_action = create_action(ActionType.START, actor_instance_id="system")
+    result = session.handle_action_result(start_action)
+    assert result.ok is True
+    assert result.state_changes["state"]["from"] == "pregame"
+    assert result.state_changes["state"]["to"] == "exploration"

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, List
 
 from core.action import Action, validate_action
+from core.action_result import ActionResult
 from core.enums import ActionType
 from game.dungeons.dungeon import Dungeon, Room
 from game.enums import RestType
@@ -98,6 +99,12 @@ class ExplorationState:
             return self.handle_rest(session, rest_type)
 
         return self._unsupported_action(action)
+
+    def handle_action_result(self, session: "GameSession", action: Action) -> ActionResult:
+        errors = self.handle_action(session, action)
+        if errors:
+            return ActionResult.failure(errors=errors)
+        return ActionResult.success()
 
     def to_dict(self) -> dict:
         return {

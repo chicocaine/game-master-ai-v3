@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List
 
 from core.action import Action, validate_action
+from core.action_result import ActionResult
 from core.enums import ActionType
 from game.dungeons.dungeon import Encounter
 from game.enums import GameState
@@ -106,6 +107,12 @@ class EncounterState:
         if action.type is ActionType.END_TURN:
             return self.handle_end_turn(session, action)
         return self._unsupported_action(action)
+
+    def handle_action_result(self, session: "GameSession", action: Action) -> ActionResult:
+        errors = self.handle_action(session, action)
+        if errors:
+            return ActionResult.failure(errors=errors)
+        return ActionResult.success()
 
     def advance_turn(self, session: "GameSession") -> List[str]:
         if self.current_encounter is None:

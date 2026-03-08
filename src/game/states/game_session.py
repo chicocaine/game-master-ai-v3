@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Set
 
 from core.action import Action
+from core.action_result import ActionResult
 
 from game.enums import (
         GameState
@@ -54,25 +55,71 @@ class GameSession:
         self.state = target_state
         return []
 
-    def handle_action(self, action: Action) -> List[str]:
+    def transition_to_result(self, target_state: GameState) -> ActionResult:
+        previous_state = self.state
+        errors = self.transition_to(target_state)
+        if errors:
+            return ActionResult.failure(errors=errors)
+        if previous_state is target_state:
+            return ActionResult.success()
+        return ActionResult.success(
+            state_changes={
+                "state": {
+                    "from": previous_state.value,
+                    "to": target_state.value,
+                }
+            }
+        )
+
+    def handle_action_result(self, action: Action) -> ActionResult:
+        before_state = self.state
         if self.state is GameState.PREGAME:
-            return self.pregame.handle_action(self, action)
+            result = self.pregame.handle_action_result(self, action)
+        elif self.state is GameState.EXPLORATION:
+            result = self.exploration.handle_action_result(self, action)
+        elif self.state is GameState.ENCOUNTER:
+            result = self.encounter.handle_action_result(self, action)
+        elif self.state is GameState.POSTGAME:
+            result = self.postgame.handle_action_result(self, action)
+        else:
+            result = ActionResult.failure(errors=[f"Unsupported game state '{self.state.value}'."])
 
-        if self.state is GameState.EXPLORATION:
-            return self.exploration.handle_action(self, action)
+        if result.errors:
+            return result
 
-        if self.state is GameState.ENCOUNTER:
-            return self.encounter.handle_action(self, action)
+        if self.state is not before_state and "state" not in result.state_changes:
+            merged_changes = dict(result.state_changes)
+            merged_changes["state"] = {
+                "from": before_state.value,
+                "to": self.state.value,
+            }
+            return ActionResult.success(events=result.events, state_changes=merged_changes)
 
-        if self.state is GameState.POSTGAME:
-            return self.postgame.handle_action(self, action)
+        return result
 
-        return [f"Unsupported game state '{self.state.value}'."]
+    def handle_action(self, action: Action) -> List[str]:
+        return self.handle_action_result(action).errors
 
     def start_encounter(self, encounter: Encounter) -> List[str]:
         if self.state is not GameState.EXPLORATION:
             return ["Encounter can only start while in exploration state."]
         return self.encounter.start_encounter(self, encounter)
+
+    def start_encounter_result(self, encounter: Encounter) -> ActionResult:
+        before_state = self.state
+        errors = self.start_encounter(encounter)
+        if errors:
+            return ActionResult.failure(errors=errors)
+        if self.state is before_state:
+            return ActionResult.success()
+        return ActionResult.success(
+            state_changes={
+                "state": {
+                    "from": before_state.value,
+                    "to": self.state.value,
+                }
+            }
+        )
 
     def start_room_encounter(self) -> List[str]:
         if self.state is not GameState.EXPLORATION:
@@ -86,6 +133,22 @@ class GameSession:
 
         return ["No uncleared encounters in current room."]
 
+    def start_room_encounter_result(self) -> ActionResult:
+        before_state = self.state
+        errors = self.start_room_encounter()
+        if errors:
+            return ActionResult.failure(errors=errors)
+        if self.state is before_state:
+            return ActionResult.success()
+        return ActionResult.success(
+            state_changes={
+                "state": {
+                    "from": before_state.value,
+                    "to": self.state.value,
+                }
+            }
+        )
+
     def end_encounter(self) -> List[str]:
         if self.state is not GameState.ENCOUNTER:
             return ["Encounter can only end while in encounter state."]
@@ -98,5 +161,21 @@ class GameSession:
             current_room.is_cleared = all(room_encounter.cleared for room_encounter in current_room.encounters)
 
         return []
+
+    def end_encounter_result(self) -> ActionResult:
+        before_state = self.state
+        errors = self.end_encounter()
+        if errors:
+            return ActionResult.failure(errors=errors)
+        if self.state is before_state:
+            return ActionResult.success()
+        return ActionResult.success(
+            state_changes={
+                "state": {
+                    "from": before_state.value,
+                    "to": self.state.value,
+                }
+            }
+        )
 
     # serialize and deserialize functions 

@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict
 
 from core.action import Action, validate_action
+from core.action_result import ActionResult
 from core.enums import ActionType
 from game.enums import GameResult
 
@@ -36,5 +37,11 @@ class PostGameState:
             return self.handle_finish(session)
 
         return self._unsupported_action(action)
+
+    def handle_action_result(self, session: "GameSession", action: Action) -> ActionResult:
+        errors = self.handle_action(session, action)
+        if errors:
+            return ActionResult.failure(errors=errors)
+        return ActionResult.success()
 
     # serialize and deserialize functions
