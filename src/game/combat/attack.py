@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 from game.enums import AttackType, DamageType
-from game.combat_elements.status_effect import StatusEffectInstance
+from game.combat.status_effect import StatusEffectInstance
 
 
 def _parse_attack_type(attack_type: Any) -> AttackType:
