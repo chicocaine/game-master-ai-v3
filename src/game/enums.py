@@ -6,6 +6,11 @@ class GameState(Enum):
     ENCOUNTER = "encounter"
     POSTGAME = "postgame"
 
+class GameResult(Enum):
+    WIN = "win"
+    LOSS = "loss"
+    ABANDONED = "abandoned"
+
 class DifficultyType(Enum):
     EASY = "easy"
     MEDIUM = "medium"
