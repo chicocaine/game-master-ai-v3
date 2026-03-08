@@ -1,5 +1,6 @@
+from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Any, List
+from typing import Any, List, Optional
 
 from game.actors.enemy import Enemy
 from game.enums import DifficultyType, RestType
@@ -163,6 +164,12 @@ class Dungeon:
 	start_room: str
 	end_room: str
 	rooms: List[Room] = field(default_factory=list)
+
+	def find_room(dungeon: Dungeon, room_id: str) -> Optional[Room]:
+		for room in dungeon.rooms:
+			if room.id == room_id:
+				return room
+		return None
 
 	def to_dict(self) -> dict:
 		return {

@@ -5,9 +5,9 @@ from game.enums import (
     DamageType,
 	ControlType,
 )
-from game.combat_elements.attack import Attack
-from game.combat_elements.spell import Spell
-from game.combat_elements.status_effect import StatusEffectInstance
+from game.combat.attack import Attack
+from game.combat.spell import Spell
+from game.combat.status_effect import StatusEffectInstance
 from game.entity.blocks.race import Race
 from game.entity.blocks.archetype import Archetype
 from game.entity.blocks.weapon import Weapon

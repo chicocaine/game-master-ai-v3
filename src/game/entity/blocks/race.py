@@ -2,8 +2,8 @@ from dataclasses import dataclass, field
 from typing import Any, List
 
 from game.enums import DamageType, ControlType
-from game.combat_elements.attack import Attack
-from game.combat_elements.spell import Spell
+from game.combat.attack import Attack
+from game.combat.spell import Spell
 
 
 def _get_str(data: dict, key: str) -> str:
