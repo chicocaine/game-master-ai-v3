@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 from core.action import create_action
 from core.enums import ActionType
+from game.actors.enemy import create_enemy
+from game.catalog.models import Catalog, DungeonTemplate, EncounterTemplate, EnemyTemplate, RoomTemplate
 from game.dungeons.dungeon import Dungeon, Room
 from game.entity.blocks.archetype import Archetype, WeaponConstraints
 from game.entity.blocks.race import Race
@@ -83,6 +85,97 @@ def _session() -> SimpleNamespace:
         exploration=SimpleNamespace(current_room=None),
         state=GameState.PREGAME,
     )
+
+
+def _dungeon_template() -> DungeonTemplate:
+    encounter = EncounterTemplate(
+        id="enc_1",
+        name="Encounter",
+        description="",
+        difficulty=DifficultyType.EASY,
+        clear_reward=10,
+        enemy_template_ids=("enemy_1",),
+    )
+    room = RoomTemplate(
+        id="room_1",
+        name="Start",
+        description="",
+        connections=(),
+        encounters=(encounter,),
+        allowed_rests=(),
+    )
+    return DungeonTemplate(
+        id="dungeon_tpl_1",
+        name="Dungeon Template",
+        description="",
+        difficulty=DifficultyType.EASY,
+        start_room="room_1",
+        end_room="room_1",
+        rooms=(room,),
+    )
+
+
+def _session_with_catalog_template_support() -> SimpleNamespace:
+    session = _session()
+    base_enemy = create_enemy(
+        id="enemy_1",
+        name="Enemy",
+        description="",
+        race=_race(),
+        archetype=_archetype(),
+        weapons=[_weapon()],
+        enemy_instance_id="",
+    )
+    catalog = Catalog(
+        enemy_templates={"enemy_1": EnemyTemplate(id="enemy_1", enemy=base_enemy)},
+        dungeon_templates={"dungeon_tpl_1": _dungeon_template()},
+    )
+    session.catalog = catalog
+
+    def _instantiate_dungeon_template(template: DungeonTemplate) -> Dungeon:
+        encounters = []
+        for encounter_template in template.rooms[0].encounters:
+            enemies = [
+                session.catalog.enemy_templates[enemy_id].enemy.__class__.from_dict(
+                    session.catalog.enemy_templates[enemy_id].enemy.to_dict()
+                )
+                for enemy_id in encounter_template.enemy_template_ids
+            ]
+            from game.dungeons.dungeon import Encounter
+
+            encounters.append(
+                Encounter(
+                    id=encounter_template.id,
+                    name=encounter_template.name,
+                    description=encounter_template.description,
+                    difficulty=encounter_template.difficulty,
+                    cleared=False,
+                    clear_reward=encounter_template.clear_reward,
+                    enemies=enemies,
+                )
+            )
+
+        room = Room(
+            id=template.rooms[0].id,
+            name=template.rooms[0].name,
+            description=template.rooms[0].description,
+            is_visited=False,
+            is_cleared=False,
+            is_rested=False,
+            encounters=encounters,
+        )
+        return Dungeon(
+            id=template.id,
+            name=template.name,
+            description=template.description,
+            difficulty=template.difficulty,
+            start_room=template.start_room,
+            end_room=template.end_room,
+            rooms=[room],
+        )
+
+    session.instantiate_dungeon_template = _instantiate_dungeon_template
+    return session
 
 
 def test_handle_create_player_enforces_max_party_size() -> None:
@@ -268,3 +361,38 @@ def test_handle_action_choose_dungeon_by_id() -> None:
     )
     result = pregame.handle_action(session, bad_action)
     assert result.errors and "was not found" in result.errors[0]
+
+
+def test_handle_action_choose_dungeon_template_by_id_materializes_runtime_dungeon() -> None:
+    pregame = PreGameState()
+    session = _session_with_catalog_template_support()
+    session.available_dungeons = [session.catalog.dungeon_templates["dungeon_tpl_1"]]
+
+    action = create_action(
+        ActionType.CHOOSE_DUNGEON,
+        parameters={"dungeon_id": "dungeon_tpl_1"},
+        actor_instance_id="system",
+    )
+    result = pregame.handle_action(session, action)
+
+    assert result.ok is True
+    assert isinstance(session.dungeon, Dungeon)
+    assert session.dungeon.id == "dungeon_tpl_1"
+    assert len(session.dungeon.rooms[0].encounters[0].enemies) == 1
+
+
+def test_handle_action_choose_dungeon_template_object_materializes_runtime_dungeon() -> None:
+    pregame = PreGameState()
+    session = _session_with_catalog_template_support()
+    dungeon_template = session.catalog.dungeon_templates["dungeon_tpl_1"]
+
+    action = create_action(
+        ActionType.CHOOSE_DUNGEON,
+        parameters={"dungeon": dungeon_template},
+        actor_instance_id="system",
+    )
+    result = pregame.handle_action(session, action)
+
+    assert result.ok is True
+    assert isinstance(session.dungeon, Dungeon)
+    assert session.dungeon.id == dungeon_template.id

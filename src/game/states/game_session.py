@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from copy import deepcopy
 from typing import Dict, List, Set
 
 from core.action import Action, validate_action
@@ -10,7 +11,8 @@ from game.enums import (
 )
 from game.actors.player import Player
 from game.actors.enemy import Enemy
-from game.dungeons.dungeon import Dungeon, Encounter
+from game.catalog.models import Catalog, DungeonTemplate
+from game.dungeons.dungeon import Dungeon, Encounter, Room
 from game.states.pregame import PreGameState
 from game.states.encounter import EncounterState
 from game.states.exploration import ExplorationState
@@ -30,12 +32,66 @@ class GameSession:
     state: GameState = GameState.PREGAME
     party: List[Player] = field(default_factory=list)
     dungeon: Dungeon | None = None
-    available_dungeons: List[Dungeon] = field(default_factory=list)
+    catalog: Catalog | None = None
+    available_dungeons: List[Dungeon | DungeonTemplate] = field(default_factory=list)
     points: int = 0
     pregame: PreGameState = field(default_factory=PreGameState)
     exploration: ExplorationState = field(default_factory=ExplorationState)
     encounter: EncounterState = field(default_factory=EncounterState)
     postgame: PostGameState = field(default_factory=PostGameState)
+
+    def instantiate_dungeon_template(self, template: DungeonTemplate) -> Dungeon:
+        if self.catalog is None:
+            raise ValueError("Cannot instantiate dungeon template without an attached catalog.")
+
+        rooms = []
+        for room_template in template.rooms:
+            encounters = []
+            for encounter_template in room_template.encounters:
+                enemies = []
+                for enemy_template_id in encounter_template.enemy_template_ids:
+                    enemy_template = self.catalog.enemy_templates.get(enemy_template_id)
+                    if enemy_template is None:
+                        raise ValueError(
+                            f"Encounter '{encounter_template.id}' references unknown enemy template '{enemy_template_id}'."
+                        )
+                    enemies.append(deepcopy(enemy_template.enemy))
+
+                encounters.append(
+                    Encounter(
+                        id=encounter_template.id,
+                        name=encounter_template.name,
+                        description=encounter_template.description,
+                        difficulty=encounter_template.difficulty,
+                        cleared=False,
+                        clear_reward=encounter_template.clear_reward,
+                        enemies=enemies,
+                    )
+                )
+
+            rooms.append(
+                Room(
+                id=room_template.id,
+                name=room_template.name,
+                description=room_template.description,
+                is_visited=False,
+                is_cleared=(len(encounters) == 0),
+                is_rested=False,
+                connections=list(room_template.connections),
+                encounters=encounters,
+                allowed_rests=list(room_template.allowed_rests),
+                )
+            )
+
+        return Dungeon(
+            id=template.id,
+            name=template.name,
+            description=template.description,
+            difficulty=template.difficulty,
+            start_room=template.start_room,
+            end_room=template.end_room,
+            rooms=rooms,
+        )
 
     def alive_players(players: List[Player]) -> List[Player]:
         return [player for player in players if player.hp > 0]
