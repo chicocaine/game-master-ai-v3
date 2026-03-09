@@ -189,6 +189,7 @@ def _catalog_with_template() -> Catalog:
 
 def test_game_session_routes_pregame_actions() -> None:
     session = _session()
+    session.catalog = _catalog_with_template()
 
     create_player_action = create_action(
         ActionType.CREATE_PLAYER,
@@ -207,7 +208,7 @@ def test_game_session_routes_pregame_actions() -> None:
 
     choose_dungeon_action = create_action(
         ActionType.CHOOSE_DUNGEON,
-        parameters={"dungeon": _dungeon()},
+        parameters={"dungeon": "dungeon_tpl_1"},
         actor_instance_id="system",
     )
     result = session.handle_action(choose_dungeon_action)
@@ -225,29 +226,23 @@ def test_game_session_routes_pregame_actions() -> None:
 
 def test_game_session_routes_exploration_actions() -> None:
     session = _session()
+    dungeon = _dungeon()
 
-    setup_actions = [
-        create_action(
-            ActionType.CREATE_PLAYER,
-            parameters={
-                "id": "player_1",
-                "name": "Player",
-                "description": "Recruit",
-                "race": _race(),
-                "archetype": _archetype(),
-                "weapons": [_weapon()],
-            },
-            actor_instance_id="system",
-        ),
-        create_action(
-            ActionType.CHOOSE_DUNGEON,
-            parameters={"dungeon": _dungeon()},
-            actor_instance_id="system",
-        ),
-        create_action(ActionType.START, actor_instance_id="system"),
-    ]
-    for action in setup_actions:
-        assert session.handle_action(action).ok is True
+    create_player_action = create_action(
+        ActionType.CREATE_PLAYER,
+        parameters={
+            "id": "player_1",
+            "name": "Player",
+            "description": "Recruit",
+            "race": _race(),
+            "archetype": _archetype(),
+            "weapons": [_weapon()],
+        },
+        actor_instance_id="system",
+    )
+    assert session.handle_action(create_player_action).ok is True
+    assert session.pregame.handle_choose_dungeon(session, dungeon).ok is True
+    assert session.handle_action(create_action(ActionType.START, actor_instance_id="system")).ok is True
 
     move_action = create_action(
         ActionType.MOVE,
@@ -270,29 +265,23 @@ def test_game_session_routes_exploration_actions() -> None:
 
 def test_game_session_routes_encounter_actions() -> None:
     session = _session()
+    dungeon = _dungeon()
 
-    setup_actions = [
-        create_action(
-            ActionType.CREATE_PLAYER,
-            parameters={
-                "id": "player_1",
-                "name": "Player",
-                "description": "Recruit",
-                "race": _race(),
-                "archetype": _archetype(),
-                "weapons": [_weapon()],
-            },
-            actor_instance_id="system",
-        ),
-        create_action(
-            ActionType.CHOOSE_DUNGEON,
-            parameters={"dungeon": _dungeon()},
-            actor_instance_id="system",
-        ),
-        create_action(ActionType.START, actor_instance_id="system"),
-    ]
-    for action in setup_actions:
-        assert session.handle_action(action).ok is True
+    create_player_action = create_action(
+        ActionType.CREATE_PLAYER,
+        parameters={
+            "id": "player_1",
+            "name": "Player",
+            "description": "Recruit",
+            "race": _race(),
+            "archetype": _archetype(),
+            "weapons": [_weapon()],
+        },
+        actor_instance_id="system",
+    )
+    assert session.handle_action(create_player_action).ok is True
+    assert session.pregame.handle_choose_dungeon(session, dungeon).ok is True
+    assert session.handle_action(create_action(ActionType.START, actor_instance_id="system")).ok is True
 
     encounter = _encounter()
     assert session.start_encounter(encounter).ok is True
@@ -313,32 +302,26 @@ def test_game_session_routes_encounter_actions() -> None:
 def test_game_session_start_and_end_encounter_helpers_validate_state() -> None:
     session = _session()
     encounter = _encounter()
+    dungeon = _dungeon()
 
     result = session.start_encounter(encounter)
     assert result.errors and "only start while in exploration" in result.errors[0]
 
-    setup_actions = [
-        create_action(
-            ActionType.CREATE_PLAYER,
-            parameters={
-                "id": "player_1",
-                "name": "Player",
-                "description": "Recruit",
-                "race": _race(),
-                "archetype": _archetype(),
-                "weapons": [_weapon()],
-            },
-            actor_instance_id="system",
-        ),
-        create_action(
-            ActionType.CHOOSE_DUNGEON,
-            parameters={"dungeon": _dungeon()},
-            actor_instance_id="system",
-        ),
-        create_action(ActionType.START, actor_instance_id="system"),
-    ]
-    for action in setup_actions:
-        assert session.handle_action(action).ok is True
+    create_player_action = create_action(
+        ActionType.CREATE_PLAYER,
+        parameters={
+            "id": "player_1",
+            "name": "Player",
+            "description": "Recruit",
+            "race": _race(),
+            "archetype": _archetype(),
+            "weapons": [_weapon()],
+        },
+        actor_instance_id="system",
+    )
+    assert session.handle_action(create_player_action).ok is True
+    assert session.pregame.handle_choose_dungeon(session, dungeon).ok is True
+    assert session.handle_action(create_action(ActionType.START, actor_instance_id="system")).ok is True
 
     assert session.start_encounter(encounter).ok is True
     assert session.state is GameState.ENCOUNTER
@@ -360,29 +343,23 @@ def test_game_session_start_and_end_encounter_helpers_validate_state() -> None:
 
 def test_game_session_start_room_encounter_and_room_clear_sync() -> None:
     session = _session()
+    dungeon = _dungeon_with_encounter()
 
-    setup_actions = [
-        create_action(
-            ActionType.CREATE_PLAYER,
-            parameters={
-                "id": "player_1",
-                "name": "Player",
-                "description": "Recruit",
-                "race": _race(),
-                "archetype": _archetype(),
-                "weapons": [_weapon()],
-            },
-            actor_instance_id="system",
-        ),
-        create_action(
-            ActionType.CHOOSE_DUNGEON,
-            parameters={"dungeon": _dungeon_with_encounter()},
-            actor_instance_id="system",
-        ),
-        create_action(ActionType.START, actor_instance_id="system"),
-    ]
-    for action in setup_actions:
-        assert session.handle_action(action).ok is True
+    create_player_action = create_action(
+        ActionType.CREATE_PLAYER,
+        parameters={
+            "id": "player_1",
+            "name": "Player",
+            "description": "Recruit",
+            "race": _race(),
+            "archetype": _archetype(),
+            "weapons": [_weapon()],
+        },
+        actor_instance_id="system",
+    )
+    assert session.handle_action(create_player_action).ok is True
+    assert session.pregame.handle_choose_dungeon(session, dungeon).ok is True
+    assert session.handle_action(create_action(ActionType.START, actor_instance_id="system")).ok is True
 
     assert session.state is GameState.EXPLORATION
     assert session.exploration.current_room is not None
@@ -457,9 +434,10 @@ def test_game_session_result_wrappers_capture_state_changes() -> None:
 
     choose_dungeon_action = create_action(
         ActionType.CHOOSE_DUNGEON,
-        parameters={"dungeon": _dungeon()},
+        parameters={"dungeon": "dungeon_tpl_1"},
         actor_instance_id="system",
     )
+    session.catalog = _catalog_with_template()
     assert session.handle_action(choose_dungeon_action).ok is True
 
     start_action = create_action(ActionType.START, actor_instance_id="system")
@@ -522,7 +500,6 @@ def test_game_session_action_lifecycle_event_payload_shape() -> None:
 def test_game_session_template_dungeon_path_materializes_runtime_instance_and_runs_encounter() -> None:
     session = _session()
     session.catalog = _catalog_with_template()
-    session.available_dungeons = [session.catalog.dungeon_templates["dungeon_tpl_1"]]
 
     setup_actions = [
         create_action(
@@ -643,15 +620,11 @@ def test_game_session_room_with_multiple_encounters_progresses_until_room_clear(
             },
             actor_instance_id="system",
         ),
-        create_action(
-            ActionType.CHOOSE_DUNGEON,
-            parameters={"dungeon": dungeon},
-            actor_instance_id="system",
-        ),
-        create_action(ActionType.START, actor_instance_id="system"),
     ]
     for action in setup_actions:
         assert session.handle_action(action).ok is True
+    assert session.pregame.handle_choose_dungeon(session, dungeon).ok is True
+    assert session.handle_action(create_action(ActionType.START, actor_instance_id="system")).ok is True
 
     result = session.start_room_encounter()
     assert result.ok is True
@@ -756,15 +729,11 @@ def test_game_session_reused_enemy_id_across_encounters_can_leak_enemy_state() -
             },
             actor_instance_id="system",
         ),
-        create_action(
-            ActionType.CHOOSE_DUNGEON,
-            parameters={"dungeon": dungeon},
-            actor_instance_id="system",
-        ),
-        create_action(ActionType.START, actor_instance_id="system"),
     ]
     for action in setup_actions:
         assert session.handle_action(action).ok is True
+    assert session.pregame.handle_choose_dungeon(session, dungeon).ok is True
+    assert session.handle_action(create_action(ActionType.START, actor_instance_id="system")).ok is True
 
     assert session.start_room_encounter().ok is True
     assert session.encounter.current_encounter is encounter_1
@@ -821,15 +790,11 @@ def test_game_session_single_encounter_allows_duplicate_enemy_ids_with_unique_in
             },
             actor_instance_id="system",
         ),
-        create_action(
-            ActionType.CHOOSE_DUNGEON,
-            parameters={"dungeon": _dungeon()},
-            actor_instance_id="system",
-        ),
-        create_action(ActionType.START, actor_instance_id="system"),
     ]
     for action in setup_actions:
         assert session.handle_action(action).ok is True
+    assert session.pregame.handle_choose_dungeon(session, _dungeon()).ok is True
+    assert session.handle_action(create_action(ActionType.START, actor_instance_id="system")).ok is True
 
     result = session.start_encounter(encounter)
     assert result.ok is True

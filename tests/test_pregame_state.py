@@ -81,7 +81,7 @@ def _session() -> SimpleNamespace:
     return SimpleNamespace(
         party=[],
         dungeon=None,
-        available_dungeons=[],
+        catalog=None,
         exploration=SimpleNamespace(current_room=None),
         state=GameState.PREGAME,
     )
@@ -330,7 +330,7 @@ def test_handle_start_moves_session_to_exploration() -> None:
 
 def test_handle_action_routes_pregame_actions() -> None:
     pregame = PreGameState()
-    session = _session()
+    session = _session_with_catalog_template_support()
 
     create_player_action = create_action(
         ActionType.CREATE_PLAYER,
@@ -350,7 +350,7 @@ def test_handle_action_routes_pregame_actions() -> None:
 
     choose_dungeon_action = create_action(
         ActionType.CHOOSE_DUNGEON,
-        parameters={"dungeon": _dungeon()},
+        parameters={"dungeon": "dungeon_tpl_1"},
         actor_instance_id="system",
     )
     result = pregame.handle_action(session, choose_dungeon_action)
@@ -364,18 +364,17 @@ def test_handle_action_routes_pregame_actions() -> None:
 
 def test_handle_action_choose_dungeon_by_id() -> None:
     pregame = PreGameState()
-    session = _session()
-    dungeon = _dungeon()
-    session.available_dungeons = [dungeon]
+    session = _session_with_catalog_template_support()
 
     action = create_action(
         ActionType.CHOOSE_DUNGEON,
-        parameters={"dungeon_id": "dungeon_1"},
+        parameters={"dungeon_id": "dungeon_tpl_1"},
         actor_instance_id="system",
     )
     result = pregame.handle_action(session, action)
     assert result.ok is True
-    assert session.dungeon is dungeon
+    assert isinstance(session.dungeon, Dungeon)
+    assert session.dungeon.id == "dungeon_tpl_1"
 
     bad_action = create_action(
         ActionType.CHOOSE_DUNGEON,
@@ -389,7 +388,6 @@ def test_handle_action_choose_dungeon_by_id() -> None:
 def test_handle_action_choose_dungeon_template_by_id_materializes_runtime_dungeon() -> None:
     pregame = PreGameState()
     session = _session_with_catalog_template_support()
-    session.available_dungeons = [session.catalog.dungeon_templates["dungeon_tpl_1"]]
 
     action = create_action(
         ActionType.CHOOSE_DUNGEON,
@@ -404,7 +402,7 @@ def test_handle_action_choose_dungeon_template_by_id_materializes_runtime_dungeo
     assert len(session.dungeon.rooms[0].encounters[0].enemies) == 1
 
 
-def test_handle_action_choose_dungeon_template_object_materializes_runtime_dungeon() -> None:
+def test_handle_action_choose_dungeon_template_object_is_rejected() -> None:
     pregame = PreGameState()
     session = _session_with_catalog_template_support()
     dungeon_template = session.catalog.dungeon_templates["dungeon_tpl_1"]
@@ -416,6 +414,5 @@ def test_handle_action_choose_dungeon_template_object_materializes_runtime_dunge
     )
     result = pregame.handle_action(session, action)
 
-    assert result.ok is True
-    assert isinstance(session.dungeon, Dungeon)
-    assert session.dungeon.id == dungeon_template.id
+    assert result.errors and "was not found" in result.errors[0]
+    assert session.dungeon is None

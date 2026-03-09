@@ -13,7 +13,7 @@ from game.actors.enemy import Enemy
 from game.catalog.models import Catalog, DungeonTemplate
 from game.factories.instance_factory import InstanceFactory, SimpleInstanceIdGenerator
 from game.runtime.models import DungeonInstance
-from game.runtime.protocols import DungeonLike, EncounterLike
+from game.runtime.protocols import EncounterLike
 from game.states.pregame import PreGameState
 from game.states.encounter import EncounterState
 from game.states.exploration import ExplorationState
@@ -32,9 +32,9 @@ ALLOWED_STATE_TRANSITIONS: Dict[GameState, Set[GameState]] = {
 class GameSession:
     state: GameState = GameState.PREGAME
     party: List[Player] = field(default_factory=list)
-    dungeon: DungeonLike | DungeonInstance | None = None
+    dungeon: DungeonInstance | None = None
     catalog: Catalog | None = None
-    available_dungeons: List[DungeonLike | DungeonTemplate] = field(default_factory=list)
+    available_dungeons: List[DungeonTemplate] = field(default_factory=list)
     points: int = 0
     pregame: PreGameState = field(default_factory=PreGameState)
     exploration: ExplorationState = field(default_factory=ExplorationState)
