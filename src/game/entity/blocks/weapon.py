@@ -64,7 +64,7 @@ def _parse_known_spells(value: Any) -> List[Spell]:
 	return spells
 
 
-@dataclass
+@dataclass(frozen=True)
 class Weapon:
 	id: str
 	name: str
@@ -74,8 +74,12 @@ class Weapon:
 	weight_class: WeaponWeightClass
 	delivery: WeaponDelivery
 	magic_type: WeaponMagicType
-	known_attacks: List[Attack] = field(default_factory=list)
-	known_spells: List[Spell] = field(default_factory=list)
+	known_attacks: tuple[Attack, ...] = field(default_factory=tuple)
+	known_spells: tuple[Spell, ...] = field(default_factory=tuple)
+
+	def __post_init__(self) -> None:
+		object.__setattr__(self, "known_attacks", tuple(self.known_attacks))
+		object.__setattr__(self, "known_spells", tuple(self.known_spells))
 
 	def to_dict(self) -> dict:
 		return {

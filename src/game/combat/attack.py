@@ -1,5 +1,7 @@
+from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from types import MappingProxyType
+from typing import Any, Dict, List, Mapping
 
 from game.enums import AttackType, DamageType
 from game.combat.status_effect import StatusEffectInstance
@@ -40,13 +42,20 @@ def _get_parameters(data: dict) -> Dict[str, Any]:
 	params = data.get("parameters", {})
 	return dict(params) if isinstance(params, dict) else {}
 
-@dataclass
+@dataclass(frozen=True)
 class Attack:
     id: str
     name: str
     description: str
     type: AttackType
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    parameters: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        immutable_parameters = MappingProxyType(deepcopy(dict(self.parameters)))
+        object.__setattr__(self, "parameters", immutable_parameters)
+
+    def __deepcopy__(self, memo: dict) -> "Attack":
+        return self
 
     @property
     def damage_types(self) -> List[DamageType]:

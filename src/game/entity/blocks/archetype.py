@@ -103,13 +103,20 @@ def _parse_enum_list(value: Any, parser) -> List[Any]:
 	return parsed
 
 
-@dataclass
+@dataclass(frozen=True)
 class WeaponConstraints:
-	proficiency: List[WeaponProficiency] = field(default_factory=list)
-	handling: List[WeaponHandling] = field(default_factory=list)
-	weight_class: List[WeaponWeightClass] = field(default_factory=list)
-	delivery: List[WeaponDelivery] = field(default_factory=list)
-	magic_type: List[WeaponMagicType] = field(default_factory=list)
+	proficiency: tuple[WeaponProficiency, ...] = field(default_factory=tuple)
+	handling: tuple[WeaponHandling, ...] = field(default_factory=tuple)
+	weight_class: tuple[WeaponWeightClass, ...] = field(default_factory=tuple)
+	delivery: tuple[WeaponDelivery, ...] = field(default_factory=tuple)
+	magic_type: tuple[WeaponMagicType, ...] = field(default_factory=tuple)
+
+	def __post_init__(self) -> None:
+		object.__setattr__(self, "proficiency", tuple(self.proficiency))
+		object.__setattr__(self, "handling", tuple(self.handling))
+		object.__setattr__(self, "weight_class", tuple(self.weight_class))
+		object.__setattr__(self, "delivery", tuple(self.delivery))
+		object.__setattr__(self, "magic_type", tuple(self.magic_type))
 
 	def to_dict(self) -> dict:
 		return {
@@ -132,7 +139,7 @@ class WeaponConstraints:
 			magic_type=_parse_enum_list(data.get("magic_type", []), _parse_weapon_magic_type),
 		)
 
-@dataclass
+@dataclass(frozen=True)
 class Archetype:
 	id: str
 	name: str
@@ -141,13 +148,21 @@ class Archetype:
 	AC_mod: int
 	spell_slot_mod: int
 	initiative_mod: int
-	resistances: List[DamageType] = field(default_factory=list)
-	immunities: List[DamageType] = field(default_factory=list)
-	vulnerabilities: List[DamageType] = field(default_factory=list)
-	cc_immunities: List[ControlType] = field(default_factory=list)
+	resistances: tuple[DamageType, ...] = field(default_factory=tuple)
+	immunities: tuple[DamageType, ...] = field(default_factory=tuple)
+	vulnerabilities: tuple[DamageType, ...] = field(default_factory=tuple)
+	cc_immunities: tuple[ControlType, ...] = field(default_factory=tuple)
 	weapon_constraints: WeaponConstraints = field(default_factory=WeaponConstraints)
-	known_spells: List[Spell] = field(default_factory=list)
-	known_attacks: List[Attack] = field(default_factory=list)
+	known_spells: tuple[Spell, ...] = field(default_factory=tuple)
+	known_attacks: tuple[Attack, ...] = field(default_factory=tuple)
+
+	def __post_init__(self) -> None:
+		object.__setattr__(self, "resistances", tuple(self.resistances))
+		object.__setattr__(self, "immunities", tuple(self.immunities))
+		object.__setattr__(self, "vulnerabilities", tuple(self.vulnerabilities))
+		object.__setattr__(self, "cc_immunities", tuple(self.cc_immunities))
+		object.__setattr__(self, "known_spells", tuple(self.known_spells))
+		object.__setattr__(self, "known_attacks", tuple(self.known_attacks))
 
 	def to_dict(self) -> dict:
 		return {

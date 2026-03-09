@@ -150,39 +150,39 @@ def _merged_attacks(race: Race, archetype: Archetype, weapons: List[Weapon]) -> 
     weapon_attacks: List[Attack] = []
     for weapon in weapons:
         weapon_attacks.extend(weapon.known_attacks)
-    merged = (
-        race.known_attacks
-        + archetype.known_attacks
-        + weapon_attacks
-    )
+    merged = [
+        *list(race.known_attacks),
+        *list(archetype.known_attacks),
+        *weapon_attacks,
+    ]
     return _dedupe_by_id(merged)
 
 def _merged_spells(race: Race, archetype: Archetype, weapons: List[Weapon]) -> List[Spell]:
     weapon_spells: List[Spell] = []
     for weapon in weapons:
         weapon_spells.extend(weapon.known_spells)
-    merged = (
-        race.known_spells
-        + archetype.known_spells
-        + weapon_spells
-    )
+    merged = [
+        *list(race.known_spells),
+        *list(archetype.known_spells),
+        *weapon_spells,
+    ]
     return _dedupe_by_id(merged)
 
 def _merged_immunities(race: Race, archetype: Archetype) -> List[DamageType]:
-    immunities = race.immunities + archetype.immunities
+    immunities = [*list(race.immunities), *list(archetype.immunities)]
     return sorted(list(set(immunities)), key=lambda x: x.value)
 
 def _merged_resistances(race: Race, archetype: Archetype) -> List[DamageType]:
-    resistances = race.resistances + archetype.resistances
+    resistances = [*list(race.resistances), *list(archetype.resistances)]
     return sorted(list(set(resistances)), key=lambda x: x.value)
 
 def _merged_vulnerabilities(race: Race, archetype: Archetype) -> List[DamageType]:
-    vulnerabilities = race.vulnerabilities + archetype.vulnerabilities
+    vulnerabilities = [*list(race.vulnerabilities), *list(archetype.vulnerabilities)]
     return sorted(list(set(vulnerabilities)), key=lambda x: x.value)
 
 def _merged_cc_immunites(race: Race, archetype: Archetype) -> List[ControlType]:
-	cc_immunities = race.cc_immunities + archetype.cc_immunities
-	return sorted(list(set(cc_immunities)), key=lambda x: x.value)
+    cc_immunities = [*list(race.cc_immunities), *list(archetype.cc_immunities)]
+    return sorted(list(set(cc_immunities)), key=lambda x: x.value)
 
 @dataclass
 class Entity:
@@ -214,10 +214,10 @@ class Entity:
         for weapon in self.weapons:
             weapon_attacks.extend(weapon.known_attacks)
         merged = (
-			self.race.known_attacks
-			+ self.archetype.known_attacks
-			+ weapon_attacks
-			+ self.known_attacks
+            list(self.race.known_attacks)
+            + list(self.archetype.known_attacks)
+            + weapon_attacks
+            + self.known_attacks
 		)
         return _dedupe_by_id(merged)
 
@@ -226,27 +226,27 @@ class Entity:
         weapon_spells: List[Spell] = []
         for weapon in self.weapons:
             weapon_spells.extend(weapon.known_spells)
-        merged = self.race.known_spells + self.archetype.known_spells + weapon_spells + self.known_spells
+        merged = list(self.race.known_spells) + list(self.archetype.known_spells) + weapon_spells + self.known_spells
         return _dedupe_by_id(merged)
 
     @property
     def merged_resistances(self) -> List[DamageType]:
-        resistances = self.race.resistances + self.archetype.resistances + self.resistances
+        resistances = list(self.race.resistances) + list(self.archetype.resistances) + self.resistances
         return sorted(list(set(resistances)), key=lambda x: x.value)
 
     @property
     def merged_immunities(self) -> List[DamageType]:
-        immunities = self.race.immunities + self.archetype.immunities + self.immunities
+        immunities = list(self.race.immunities) + list(self.archetype.immunities) + self.immunities
         return sorted(list(set(immunities)), key=lambda x: x.value)
 
     @property
     def merged_vulnerabilities(self) -> List[DamageType]:
-        vulnerabilities = self.race.vulnerabilities + self.archetype.vulnerabilities + self.vulnerabilities
+        vulnerabilities = list(self.race.vulnerabilities) + list(self.archetype.vulnerabilities) + self.vulnerabilities
         return sorted(list(set(vulnerabilities)), key=lambda x: x.value)
 
     @property
     def merged_cc_immunities(self) -> List[ControlType]:
-        cc_immunities = self.race.cc_immunities + self.archetype.cc_immunities + self.cc_immunities
+        cc_immunities = list(self.race.cc_immunities) + list(self.archetype.cc_immunities) + self.cc_immunities
         return sorted(list(set(cc_immunities)), key=lambda x: x.value)
 
     @property
