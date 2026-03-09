@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import random
-from typing import Any
+from typing import Any, Protocol
 
+from game.runtime.protocols import EncounterLike
 from game.util.dice import roll_for_initiative
+
+
+class SessionForInitiative(Protocol):
+    party: list[Any]
+    rng: random.Random
 
 
 def _initiative_modifier(actor: object) -> int:
@@ -14,15 +20,19 @@ def _initiative_modifier(actor: object) -> int:
         return 0
     
 
-def _alive_players(session: Any) -> list[Any]:
+def _alive_players(session: SessionForInitiative) -> list[Any]:
     return [player for player in getattr(session, "party", []) if getattr(player, "hp", 0) > 0]
 
 
-def _alive_enemies(encounter: Any) -> list[Any]:
+def _alive_enemies(encounter: EncounterLike) -> list[Any]:
     return [enemy for enemy in getattr(encounter, "enemies", []) if getattr(enemy, "hp", 0) > 0]
 
 
-def initiate_encounter(session: Any, encounter: Any, rng: random.Random | None = None) -> list[str]:
+def initiate_encounter(
+    session: SessionForInitiative,
+    encounter: EncounterLike,
+    rng: random.Random | None = None,
+) -> list[str]:
     rng = rng or getattr(session, "rng", None) or random.Random(5)
     combatants = [
         *_alive_players(session),

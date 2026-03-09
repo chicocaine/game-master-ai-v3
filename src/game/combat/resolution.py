@@ -20,6 +20,7 @@ from game.combat.status_effect import (
 )
 from game.combat.attack import Attack
 from game.combat.spell import Spell
+from game.runtime.protocols import EncounterLike
 
 from typing import TYPE_CHECKING
 
@@ -59,15 +60,15 @@ def _instance_id(actor: Any) -> str:
     return str(getattr(actor, "player_instance_id", "") or getattr(actor, "enemy_instance_id", ""))
 
 
-def _all_actors(session: "GameSession", encounter: Any) -> List[Any]:
+def _all_actors(session: "GameSession", encounter: EncounterLike) -> List[Any]:
     return [*session.party, *encounter.enemies]
 
 
-def _alive_actors(session: "GameSession", encounter: Any) -> List[Any]:
+def _alive_actors(session: "GameSession", encounter: EncounterLike) -> List[Any]:
     return [actor for actor in _all_actors(session, encounter) if getattr(actor, "hp", 0) > 0]
 
 
-def _find_actor_by_instance_id(session: "GameSession", encounter: Any, instance_id: str) -> Any | None:
+def _find_actor_by_instance_id(session: "GameSession", encounter: EncounterLike, instance_id: str) -> Any | None:
     for actor in _all_actors(session, encounter):
         if _instance_id(actor) == instance_id:
             return actor
@@ -161,7 +162,7 @@ def _cleanse_status_effects(target: Any, spell: Spell) -> int:
 
 def _target_list_for_action(
     session: "GameSession",
-    encounter: Any,
+    encounter: EncounterLike,
     raw_target_ids: object,
     is_aoe: bool,
 ) -> tuple[List[Any], List[str]]:
@@ -277,7 +278,7 @@ def _did_hit_target(actor: Any, target: Any, hit_modifiers: int, dc: int) -> boo
     )
 
 
-def resolve_attack_action(session: "GameSession", encounter: Any, action: Action) -> ActionResult:
+def resolve_attack_action(session: "GameSession", encounter: EncounterLike, action: Action) -> ActionResult:
     actor = _find_actor_by_instance_id(session, encounter, action.actor_instance_id)
     if actor is None:
         return ActionResult.failure(errors=["Attack actor is not part of the active encounter."])
@@ -354,7 +355,7 @@ def resolve_attack_action(session: "GameSession", encounter: Any, action: Action
     return ActionResult.success(events=events, state_changes=state_changes)
 
 
-def resolve_cast_spell_action(session: "GameSession", encounter: Any, action: Action) -> ActionResult:
+def resolve_cast_spell_action(session: "GameSession", encounter: EncounterLike, action: Action) -> ActionResult:
     actor = _find_actor_by_instance_id(session, encounter, action.actor_instance_id)
     if actor is None:
         return ActionResult.failure(errors=["Spell actor is not part of the active encounter."])

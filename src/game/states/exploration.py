@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, List
 
 from core.action import Action, validate_action
 from core.action_result import ActionResult
 from core.enums import ActionType
 from game.enums import RestType
+from game.runtime.models import DungeonInstance, RoomInstance
 from game.runtime.protocols import RoomLike
 
 if TYPE_CHECKING:
@@ -32,7 +33,7 @@ class ExplorationState:
     # other properties of exploration
 
     @staticmethod
-    def _find_room(dungeon: Any, room_id: str) -> Any | None:
+    def _find_room(dungeon: DungeonInstance, room_id: str) -> RoomInstance | None:
         for room in getattr(dungeon, "rooms", []):
             if getattr(room, "id", "") == room_id:
                 return room
