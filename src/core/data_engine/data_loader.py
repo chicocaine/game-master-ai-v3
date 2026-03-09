@@ -7,9 +7,9 @@ from typing import Any, Dict, List, Optional
 from core.data_engine.json_schema_validator import JsonSchemaValidator
 from game.actors.enemy import Enemy
 from game.actors.player import Player
-from game.combat_elements.attack import Attack
-from game.combat_elements.spell import Spell
-from game.combat_elements.status_effect import StatusEffect, StatusEffectInstance
+from game.combat.attack import Attack
+from game.combat.spell import Spell
+from game.combat.status_effect import StatusEffect, StatusEffectInstance
 from game.dungeons.dungeon import Dungeon, Encounter, Room
 from game.entity.blocks.archetype import Archetype, WeaponConstraints
 from game.entity.blocks.race import Race
