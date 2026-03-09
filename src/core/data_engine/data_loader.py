@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -171,6 +172,11 @@ class DataLoader:
 						self._require_id(idx["enemies"], enemy_id, "enemies")
 
 	def load_hydrated(self) -> Dict[str, Any]:
+		warnings.warn(
+			"DataLoader.load_hydrated() is deprecated; use load_catalog() + factories for runtime instances.",
+			DeprecationWarning,
+			stacklevel=2,
+		)
 		raw = self.load_raw_data()
 		self._validate_cross_references(raw)
 
@@ -573,7 +579,7 @@ class DataLoader:
 				enemy_instance_id="",
 				persona=str(row.get("persona", "")),
 			)
-			enemy_templates[enemy_id] = EnemyTemplate(id=enemy_id, enemy=enemy)
+			enemy_templates[enemy_id] = EnemyTemplate.from_enemy(enemy_id, enemy)
 
 		dungeon_templates: Dict[str, DungeonTemplate] = {}
 		for dungeon_row in raw["dungeons"]:
@@ -623,6 +629,11 @@ def load_game_data(
 	validate_schema: bool = True,
 ) -> Dict[str, Any]:
 	"""Convenience wrapper to load and hydrate all game data."""
+	warnings.warn(
+		"load_game_data() is deprecated; use load_game_catalog() with GameFactory/InstanceFactory.",
+		DeprecationWarning,
+		stacklevel=2,
+	)
 	return DataLoader(
 		data_dir=data_dir,
 		schema_dir=schema_dir,
