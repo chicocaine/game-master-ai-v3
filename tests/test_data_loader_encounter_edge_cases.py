@@ -44,7 +44,7 @@ def _save_dungeons_json(data_dir: Path, payload: list[dict]) -> None:
     )
 
 
-def test_data_loader_hydrates_two_or_more_encounters_in_single_room(tmp_path: Path) -> None:
+def test_data_loader_catalog_preserves_two_or_more_encounters_in_single_room(tmp_path: Path) -> None:
     data_dir = _copy_data_dir(tmp_path)
     dungeons = _load_dungeons_json(data_dir)
 
@@ -71,15 +71,15 @@ def test_data_loader_hydrates_two_or_more_encounters_in_single_room(tmp_path: Pa
     ]
     _save_dungeons_json(data_dir, dungeons)
 
-    hydrated = DataLoader(data_dir=data_dir, schema_dir=data_dir / "schemata").load_hydrated()
-    dungeon = hydrated["dungeons"]["dng_ember_ruins"]
+    catalog = DataLoader(data_dir=data_dir, schema_dir=data_dir / "schemata").load_catalog()
+    dungeon = catalog.dungeon_templates["dng_ember_ruins"]
     room = dungeon.rooms[0]
 
     assert len(room.encounters) == 2
     assert [encounter.id for encounter in room.encounters] == ["enc_gate_1", "enc_gate_2"]
 
 
-def test_data_loader_reused_enemy_id_across_encounters_reuses_enemy_instance(tmp_path: Path) -> None:
+def test_data_loader_catalog_reused_enemy_id_across_encounters_keeps_template_id(tmp_path: Path) -> None:
     data_dir = _copy_data_dir(tmp_path)
     dungeons = _load_dungeons_json(data_dir)
 
@@ -106,18 +106,17 @@ def test_data_loader_reused_enemy_id_across_encounters_reuses_enemy_instance(tmp
     ]
     _save_dungeons_json(data_dir, dungeons)
 
-    hydrated = DataLoader(data_dir=data_dir, schema_dir=data_dir / "schemata").load_hydrated()
-    dungeon = hydrated["dungeons"]["dng_ember_ruins"]
+    catalog = DataLoader(data_dir=data_dir, schema_dir=data_dir / "schemata").load_catalog()
+    dungeon = catalog.dungeon_templates["dng_ember_ruins"]
     room = dungeon.rooms[0]
 
-    first_enemy = room.encounters[0].enemies[0]
-    second_enemy = room.encounters[1].enemies[0]
-    assert first_enemy.id == "enemy_goblin_skirmisher"
-    assert second_enemy.id == "enemy_goblin_skirmisher"
-    assert first_enemy is second_enemy
+    first_enemy_id = room.encounters[0].enemy_template_ids[0]
+    second_enemy_id = room.encounters[1].enemy_template_ids[0]
+    assert first_enemy_id == "enemy_goblin_skirmisher"
+    assert second_enemy_id == "enemy_goblin_skirmisher"
 
 
-def test_data_loader_reused_enemy_mutation_leaks_between_encounters(tmp_path: Path) -> None:
+def test_data_loader_catalog_to_factory_prevents_cross_encounter_enemy_mutation_leak(tmp_path: Path) -> None:
     data_dir = _copy_data_dir(tmp_path)
     dungeons = _load_dungeons_json(data_dir)
 
@@ -144,8 +143,13 @@ def test_data_loader_reused_enemy_mutation_leaks_between_encounters(tmp_path: Pa
     ]
     _save_dungeons_json(data_dir, dungeons)
 
-    hydrated = DataLoader(data_dir=data_dir, schema_dir=data_dir / "schemata").load_hydrated()
-    dungeon = hydrated["dungeons"]["dng_ember_ruins"]
+    catalog = DataLoader(data_dir=data_dir, schema_dir=data_dir / "schemata").load_catalog()
+    template = catalog.dungeon_templates["dng_ember_ruins"]
+    dungeon = InstanceFactory.dungeon_from_template(
+        template,
+        catalog,
+        id_gen=SimpleInstanceIdGenerator(),
+    )
     room = dungeon.rooms[0]
 
     encounter_one_enemy = room.encounters[0].enemies[0]
@@ -154,8 +158,8 @@ def test_data_loader_reused_enemy_mutation_leaks_between_encounters(tmp_path: Pa
     starting_hp = encounter_one_enemy.hp
     encounter_one_enemy.hp = max(0, starting_hp - 3)
 
-    assert encounter_two_enemy.hp == encounter_one_enemy.hp
-    assert encounter_one_enemy is encounter_two_enemy
+    assert encounter_two_enemy.hp != encounter_one_enemy.hp
+    assert encounter_one_enemy is not encounter_two_enemy
 
 
 def test_data_loader_rejects_duplicate_enemy_id_in_single_encounter(tmp_path: Path) -> None:
@@ -169,7 +173,7 @@ def test_data_loader_rejects_duplicate_enemy_id_in_single_encounter(tmp_path: Pa
     _save_dungeons_json(data_dir, dungeons)
 
     with pytest.raises(JsonSchemaValidationError):
-        DataLoader(data_dir=data_dir, schema_dir=data_dir / "schemata").load_hydrated()
+        DataLoader(data_dir=data_dir, schema_dir=data_dir / "schemata").load_catalog()
 
 
 def test_data_loader_catalog_preserves_reused_enemy_template_ids(tmp_path: Path) -> None:

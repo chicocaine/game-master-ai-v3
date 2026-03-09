@@ -634,11 +634,18 @@ def load_game_data(
 		DeprecationWarning,
 		stacklevel=2,
 	)
-	return DataLoader(
+	loader = DataLoader(
 		data_dir=data_dir,
 		schema_dir=schema_dir,
 		validate_schema=validate_schema,
-	).load_hydrated()
+	)
+	with warnings.catch_warnings():
+		warnings.filterwarnings(
+			"ignore",
+			message=r"DataLoader\.load_hydrated\(\) is deprecated;",
+			category=DeprecationWarning,
+		)
+		return loader.load_hydrated()
 
 
 def load_game_catalog(
