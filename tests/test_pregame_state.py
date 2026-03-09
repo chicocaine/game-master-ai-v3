@@ -127,7 +127,7 @@ def _session_with_catalog_template_support() -> SimpleNamespace:
         enemy_instance_id="",
     )
     catalog = Catalog(
-        enemy_templates={"enemy_1": EnemyTemplate(id="enemy_1", enemy=base_enemy)},
+        enemy_templates={"enemy_1": EnemyTemplate.from_enemy("enemy_1", base_enemy)},
         dungeon_templates={"dungeon_tpl_1": _dungeon_template()},
     )
     session.catalog = catalog
@@ -136,9 +136,7 @@ def _session_with_catalog_template_support() -> SimpleNamespace:
         encounters = []
         for encounter_template in template.rooms[0].encounters:
             enemies = [
-                session.catalog.enemy_templates[enemy_id].enemy.__class__.from_dict(
-                    session.catalog.enemy_templates[enemy_id].enemy.to_dict()
-                )
+                session.catalog.enemy_templates[enemy_id].instantiate_enemy()
                 for enemy_id in encounter_template.enemy_template_ids
             ]
             from game.dungeons.dungeon import Encounter

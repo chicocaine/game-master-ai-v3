@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING, Any, List
 from core.action import Action, validate_action
 from core.action_result import ActionResult
 from core.enums import ActionType
-from game.dungeons.dungeon import Room
 from game.enums import RestType
+from game.runtime.protocols import RoomLike
 
 if TYPE_CHECKING:
     from game.states.game_session import GameSession
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class ExplorationState:
-    current_room: Room | None = None
+    current_room: RoomLike | None = None
     SUPPORTED_ACTIONS = {
         ActionType.MOVE,
         ActionType.REST,

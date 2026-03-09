@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from copy import deepcopy
 from random import Random
+from pathlib import Path
 from typing import Iterable
 
+from core.data_engine.data_loader import load_game_catalog
 from game.actors.player import Player
 from game.catalog.models import Catalog
 from game.enums import GameState
@@ -11,6 +13,28 @@ from game.states.game_session import GameSession
 
 
 class GameFactory:
+    @classmethod
+    def create_session_from_data_dir(
+        cls,
+        data_dir: Path | str,
+        schema_dir: Path | str | None = None,
+        selected_dungeon_id: str | None = None,
+        party: Iterable[Player] | None = None,
+        seed: int = 5,
+        validate_schema: bool = True,
+    ) -> GameSession:
+        catalog = load_game_catalog(
+            data_dir=data_dir,
+            schema_dir=schema_dir,
+            validate_schema=validate_schema,
+        )
+        return cls.create_session(
+            catalog=catalog,
+            selected_dungeon_id=selected_dungeon_id,
+            party=party,
+            seed=seed,
+        )
+
     @staticmethod
     def _assign_player_instance_ids(players: Iterable[Player]) -> list[Player]:
         assigned: list[Player] = []

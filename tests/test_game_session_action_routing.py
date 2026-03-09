@@ -182,7 +182,7 @@ def _catalog_with_template() -> Catalog:
         rooms=(room_template,),
     )
     return Catalog(
-        enemy_templates={"enemy_tpl_1": EnemyTemplate(id="enemy_tpl_1", enemy=enemy)},
+            enemy_templates={"enemy_tpl_1": EnemyTemplate.from_enemy("enemy_tpl_1", enemy)},
         dungeon_templates={"dungeon_tpl_1": dungeon_template},
     )
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Dict, Tuple
 
@@ -10,7 +11,17 @@ from game.enums import DifficultyType, RestType
 @dataclass(frozen=True)
 class EnemyTemplate:
     id: str
-    enemy: Enemy
+    enemy_seed: Enemy
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "enemy_seed", deepcopy(self.enemy_seed))
+
+    @classmethod
+    def from_enemy(cls, template_id: str, enemy: Enemy) -> "EnemyTemplate":
+        return cls(id=template_id, enemy_seed=enemy)
+
+    def instantiate_enemy(self) -> Enemy:
+        return deepcopy(self.enemy_seed)
 
 
 @dataclass(frozen=True)

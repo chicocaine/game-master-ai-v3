@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Dict
 
@@ -22,7 +21,7 @@ class SimpleInstanceIdGenerator:
 class InstanceFactory:
     @staticmethod
     def enemy_from_template(template: EnemyTemplate, id_gen: SimpleInstanceIdGenerator) -> EnemyInstance:
-        base = deepcopy(template.enemy)
+        base = template.instantiate_enemy()
         enemy_instance_id = id_gen.next("enemy")
         base.enemy_instance_id = enemy_instance_id
         return EnemyInstance(

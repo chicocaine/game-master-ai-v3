@@ -11,9 +11,9 @@ from game.enums import (
 from game.actors.player import Player
 from game.actors.enemy import Enemy
 from game.catalog.models import Catalog, DungeonTemplate
-from game.dungeons.dungeon import Dungeon, Encounter, Room
 from game.factories.instance_factory import InstanceFactory, SimpleInstanceIdGenerator
 from game.runtime.models import DungeonInstance
+from game.runtime.protocols import DungeonLike, EncounterLike
 from game.states.pregame import PreGameState
 from game.states.encounter import EncounterState
 from game.states.exploration import ExplorationState
@@ -32,9 +32,9 @@ ALLOWED_STATE_TRANSITIONS: Dict[GameState, Set[GameState]] = {
 class GameSession:
     state: GameState = GameState.PREGAME
     party: List[Player] = field(default_factory=list)
-    dungeon: Dungeon | DungeonInstance | None = None
+    dungeon: DungeonLike | DungeonInstance | None = None
     catalog: Catalog | None = None
-    available_dungeons: List[Dungeon | DungeonTemplate] = field(default_factory=list)
+    available_dungeons: List[DungeonLike | DungeonTemplate] = field(default_factory=list)
     points: int = 0
     pregame: PreGameState = field(default_factory=PreGameState)
     exploration: ExplorationState = field(default_factory=ExplorationState)
@@ -53,7 +53,7 @@ class GameSession:
     def alive_players(players: List[Player]) -> List[Player]:
         return [player for player in players if player.hp > 0]
     
-    def alive_enemies(encounter: Encounter) -> List[Enemy]:
+    def alive_enemies(encounter: EncounterLike) -> List[Enemy]:
          return [enemy for enemy in encounter.enemies if enemy.hp > 0]
 
     def can_transition_to(self, target_state: GameState) -> bool:
@@ -191,7 +191,7 @@ class GameSession:
             state_changes=result.state_changes,
         )
 
-    def start_encounter(self, encounter: Encounter) -> ActionResult:
+    def start_encounter(self, encounter: EncounterLike) -> ActionResult:
         before_state = self.state
         if self.state is not GameState.EXPLORATION:
             return ActionResult.failure(errors=["Encounter can only start while in exploration state."])

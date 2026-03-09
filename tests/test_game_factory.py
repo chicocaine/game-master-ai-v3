@@ -97,7 +97,7 @@ def _catalog() -> Catalog:
         rooms=(room,),
     )
     return Catalog(
-        enemy_templates={"enemy_tpl_1": EnemyTemplate(id="enemy_tpl_1", enemy=enemy)},
+        enemy_templates={"enemy_tpl_1": EnemyTemplate.from_enemy("enemy_tpl_1", enemy)},
         dungeon_templates={"dungeon_tpl_1": dungeon},
     )
 
@@ -191,3 +191,16 @@ def test_game_factory_assigns_sequential_player_instance_ids_for_unassigned_play
     session = GameFactory.create_session(catalog, party=[player_a, player_b])
 
     assert [player.player_instance_id for player in session.party] == ["player_1", "player_2"]
+
+
+def test_game_factory_create_session_from_data_dir_uses_catalog_path() -> None:
+    session = GameFactory.create_session_from_data_dir(
+        data_dir="data",
+        schema_dir="data/schemata",
+        selected_dungeon_id="dng_ember_ruins",
+        party=[],
+    )
+
+    assert session.catalog is not None
+    assert session.dungeon is not None
+    assert session.dungeon.id == "dng_ember_ruins"

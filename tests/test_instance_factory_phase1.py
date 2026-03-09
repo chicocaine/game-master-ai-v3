@@ -62,7 +62,7 @@ def _enemy_template(template_id: str) -> EnemyTemplate:
         weapons=[_weapon()],
         enemy_instance_id="",
     )
-    return EnemyTemplate(id=template_id, enemy=enemy)
+    return EnemyTemplate.from_enemy(template_id, enemy)
 
 
 def test_phase1_factory_generates_simple_instance_ids() -> None:

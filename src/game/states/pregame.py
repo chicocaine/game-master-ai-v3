@@ -6,8 +6,8 @@ from core.action_result import ActionResult
 from core.enums import ActionType
 from game.actors.player import Player, create_player
 from game.catalog.models import DungeonTemplate
-from game.dungeons.dungeon import Dungeon
 from game.runtime.models import DungeonInstance
+from game.runtime.protocols import DungeonLike
 from game.enums import GameState
 from game.entity.blocks.race import Race
 from game.entity.blocks.archetype import Archetype
@@ -44,26 +44,26 @@ class PreGameState:
         return None
 
     @staticmethod
-    def _resolve_dungeon_by_id(session: "GameSession", dungeon_id: str) -> Dungeon | DungeonTemplate | DungeonInstance | None:
+    def _resolve_dungeon_by_id(session: "GameSession", dungeon_id: str) -> DungeonLike | DungeonTemplate | DungeonInstance | None:
         if not dungeon_id:
             return None
 
         dungeon_catalog = getattr(session, "dungeon_catalog", None)
         if isinstance(dungeon_catalog, dict):
             candidate = dungeon_catalog.get(dungeon_id)
-            if isinstance(candidate, (Dungeon, DungeonTemplate, DungeonInstance)):
+            if isinstance(candidate, (DungeonTemplate, DungeonInstance)) or isinstance(candidate, DungeonLike):
                 return candidate
 
         available_dungeons = getattr(session, "available_dungeons", None)
         if isinstance(available_dungeons, list):
             for dungeon in available_dungeons:
-                if isinstance(dungeon, (Dungeon, DungeonTemplate, DungeonInstance)) and dungeon.id == dungeon_id:
+                if (isinstance(dungeon, (DungeonTemplate, DungeonInstance)) or isinstance(dungeon, DungeonLike)) and dungeon.id == dungeon_id:
                     return dungeon
 
         dungeons = getattr(session, "dungeons", None)
         if isinstance(dungeons, list):
             for dungeon in dungeons:
-                if isinstance(dungeon, (Dungeon, DungeonTemplate, DungeonInstance)) and dungeon.id == dungeon_id:
+                if (isinstance(dungeon, (DungeonTemplate, DungeonInstance)) or isinstance(dungeon, DungeonLike)) and dungeon.id == dungeon_id:
                     return dungeon
 
         return None
@@ -72,13 +72,7 @@ class PreGameState:
     def _materialize_dungeon_candidate(
         session: "GameSession",
         candidate: Any,
-    ) -> tuple[Dungeon | None, str | None]:
-        if isinstance(candidate, Dungeon):
-            return candidate, None
-
-        if isinstance(candidate, DungeonInstance):
-            return candidate, None
-
+    ) -> tuple[DungeonLike | None, str | None]:
         if isinstance(candidate, DungeonTemplate):
             instantiate = getattr(session, "instantiate_dungeon_template", None)
             if not callable(instantiate):
@@ -87,6 +81,12 @@ class PreGameState:
                 return instantiate(candidate), None
             except Exception as exc:  # pragma: no cover - defensive path
                 return None, str(exc)
+
+        if isinstance(candidate, DungeonInstance):
+            return candidate, None
+
+        if isinstance(candidate, DungeonLike):
+            return candidate, None
 
         return None, "Unsupported dungeon payload type."
 
@@ -169,7 +169,7 @@ class PreGameState:
         session.party[player_index] = replacement_player
         return ActionResult.success()
 
-    def handle_choose_dungeon(self, session: "GameSession", dungeon: Dungeon | DungeonInstance) -> ActionResult:
+    def handle_choose_dungeon(self, session: "GameSession", dungeon: DungeonLike | DungeonInstance) -> ActionResult:
         errors: List[str] = []
         if dungeon is None:
             return ActionResult.failure(errors=["Dungeon cannot be None."])
@@ -254,7 +254,7 @@ class PreGameState:
 
         if action.type is ActionType.CHOOSE_DUNGEON:
             dungeon_param = action.parameters.get("dungeon")
-            if isinstance(dungeon_param, (Dungeon, DungeonTemplate)):
+            if isinstance(dungeon_param, (DungeonTemplate, DungeonInstance)) or isinstance(dungeon_param, DungeonLike):
                 dungeon, materialize_error = self._materialize_dungeon_candidate(session, dungeon_param)
                 if materialize_error:
                     return ActionResult.failure(errors=[materialize_error])
