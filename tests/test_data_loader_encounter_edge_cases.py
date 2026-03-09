@@ -5,6 +5,7 @@ import pytest
 
 from core.data_engine.data_loader import DataLoader
 from core.data_engine.json_schema_validator import JsonSchemaValidationError
+from game.factories.instance_factory import InstanceFactory, SimpleInstanceIdGenerator
 
 
 def _copy_data_dir(tmp_path: Path) -> Path:
@@ -169,3 +170,85 @@ def test_data_loader_rejects_duplicate_enemy_id_in_single_encounter(tmp_path: Pa
 
     with pytest.raises(JsonSchemaValidationError):
         DataLoader(data_dir=data_dir, schema_dir=data_dir / "schemata").load_hydrated()
+
+
+def test_data_loader_catalog_preserves_reused_enemy_template_ids(tmp_path: Path) -> None:
+    data_dir = _copy_data_dir(tmp_path)
+    dungeons = _load_dungeons_json(data_dir)
+
+    first_room = dungeons[0]["rooms"][0]
+    first_room["encounters"] = [
+        {
+            "id": "enc_template_1",
+            "name": "Template One",
+            "description": "",
+            "difficulty": "easy",
+            "cleared": False,
+            "clear_reward": 10,
+            "enemy_ids": ["enemy_goblin_skirmisher"],
+        },
+        {
+            "id": "enc_template_2",
+            "name": "Template Two",
+            "description": "",
+            "difficulty": "easy",
+            "cleared": False,
+            "clear_reward": 10,
+            "enemy_ids": ["enemy_goblin_skirmisher"],
+        },
+    ]
+    _save_dungeons_json(data_dir, dungeons)
+
+    catalog = DataLoader(data_dir=data_dir, schema_dir=data_dir / "schemata").load_catalog()
+    dungeon_template = catalog.dungeon_templates["dng_ember_ruins"]
+    encounter_templates = dungeon_template.rooms[0].encounters
+
+    assert len(encounter_templates) == 2
+    assert encounter_templates[0].enemy_template_ids == ("enemy_goblin_skirmisher",)
+    assert encounter_templates[1].enemy_template_ids == ("enemy_goblin_skirmisher",)
+
+
+def test_data_loader_catalog_to_instance_factory_avoids_runtime_enemy_leak(tmp_path: Path) -> None:
+    data_dir = _copy_data_dir(tmp_path)
+    dungeons = _load_dungeons_json(data_dir)
+
+    first_room = dungeons[0]["rooms"][0]
+    first_room["encounters"] = [
+        {
+            "id": "enc_runtime_1",
+            "name": "Runtime One",
+            "description": "",
+            "difficulty": "easy",
+            "cleared": False,
+            "clear_reward": 10,
+            "enemy_ids": ["enemy_goblin_skirmisher"],
+        },
+        {
+            "id": "enc_runtime_2",
+            "name": "Runtime Two",
+            "description": "",
+            "difficulty": "easy",
+            "cleared": False,
+            "clear_reward": 10,
+            "enemy_ids": ["enemy_goblin_skirmisher"],
+        },
+    ]
+    _save_dungeons_json(data_dir, dungeons)
+
+    catalog = DataLoader(data_dir=data_dir, schema_dir=data_dir / "schemata").load_catalog()
+    template = catalog.dungeon_templates["dng_ember_ruins"]
+    dungeon_instance = InstanceFactory.dungeon_from_template(
+        template,
+        catalog,
+        id_gen=SimpleInstanceIdGenerator(),
+    )
+
+    enemy_a = dungeon_instance.rooms[0].encounters[0].enemies[0]
+    enemy_b = dungeon_instance.rooms[0].encounters[1].enemies[0]
+    before_b = enemy_b.hp
+    enemy_a.hp = max(0, enemy_a.hp - 2)
+
+    assert enemy_a is not enemy_b
+    assert enemy_a.instance_id == "enemy_1"
+    assert enemy_b.instance_id == "enemy_2"
+    assert enemy_b.hp == before_b

@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from core.data_engine.json_schema_validator import JsonSchemaValidator
 from game.actors.enemy import Enemy
 from game.actors.player import Player
+from game.catalog.models import Catalog, DungeonTemplate, EncounterTemplate, EnemyTemplate, RoomTemplate
 from game.combat.attack import Attack
 from game.combat.spell import Spell
 from game.combat.status_effect import StatusEffect, StatusEffectInstance
@@ -415,6 +416,55 @@ class DataLoader:
 		raw = self.load_raw_data()
 		self._validate_cross_references(raw)
 
+	def load_catalog(self) -> Catalog:
+		"""Load immutable-ish templates used to instantiate mutable runtime objects."""
+		hydrated = self.load_hydrated()
+
+		enemy_templates = {
+			enemy_id: EnemyTemplate(id=enemy_id, enemy=enemy)
+			for enemy_id, enemy in hydrated["enemies"].items()
+		}
+
+		dungeon_templates: Dict[str, DungeonTemplate] = {}
+		for dungeon in hydrated["dungeons"].values():
+			room_templates: List[RoomTemplate] = []
+			for room in dungeon.rooms:
+				encounter_templates: List[EncounterTemplate] = []
+				for encounter in room.encounters:
+					encounter_templates.append(
+						EncounterTemplate(
+							id=encounter.id,
+							name=encounter.name,
+							description=encounter.description,
+							difficulty=encounter.difficulty,
+							clear_reward=encounter.clear_reward,
+							enemy_template_ids=tuple(enemy.id for enemy in encounter.enemies),
+						)
+					)
+
+				room_templates.append(
+					RoomTemplate(
+						id=room.id,
+						name=room.name,
+						description=room.description,
+						connections=tuple(room.connections),
+						encounters=tuple(encounter_templates),
+						allowed_rests=tuple(room.allowed_rests),
+					)
+				)
+
+			dungeon_templates[dungeon.id] = DungeonTemplate(
+				id=dungeon.id,
+				name=dungeon.name,
+				description=dungeon.description,
+				difficulty=dungeon.difficulty,
+				start_room=dungeon.start_room,
+				end_room=dungeon.end_room,
+				rooms=tuple(room_templates),
+			)
+
+		return Catalog(enemy_templates=enemy_templates, dungeon_templates=dungeon_templates)
+
 
 def load_game_data(
 	data_dir: Path | str = Path("data"),
@@ -427,4 +477,17 @@ def load_game_data(
 		schema_dir=schema_dir,
 		validate_schema=validate_schema,
 	).load_hydrated()
+
+
+def load_game_catalog(
+	data_dir: Path | str = Path("data"),
+	schema_dir: Optional[Path | str] = None,
+	validate_schema: bool = True,
+) -> Catalog:
+	"""Convenience wrapper to load catalog templates for runtime instantiation."""
+	return DataLoader(
+		data_dir=data_dir,
+		schema_dir=schema_dir,
+		validate_schema=validate_schema,
+	).load_catalog()
 
