@@ -475,3 +475,287 @@ def test_game_session_action_lifecycle_event_payload_shape() -> None:
         assert event["action_id"] == action.action_id
         assert event["action_type"] == action.type.value
         assert event["actor_instance_id"] == "player_1"
+
+
+def test_game_session_room_with_multiple_encounters_progresses_until_room_clear() -> None:
+    session = _session()
+
+    first_enemy = create_enemy(
+        id="enemy_a",
+        name="Enemy A",
+        description="",
+        race=_race(),
+        archetype=_archetype(),
+        weapons=[_weapon()],
+        enemy_instance_id="enemy_inst_a",
+    )
+    second_enemy = create_enemy(
+        id="enemy_b",
+        name="Enemy B",
+        description="",
+        race=_race(),
+        archetype=_archetype(),
+        weapons=[_weapon()],
+        enemy_instance_id="enemy_inst_b",
+    )
+    encounter_1 = Encounter(
+        id="enc_1",
+        name="Encounter One",
+        description="",
+        difficulty=DifficultyType.EASY,
+        cleared=False,
+        clear_reward=10,
+        enemies=[first_enemy],
+    )
+    encounter_2 = Encounter(
+        id="enc_2",
+        name="Encounter Two",
+        description="",
+        difficulty=DifficultyType.EASY,
+        cleared=False,
+        clear_reward=20,
+        enemies=[second_enemy],
+    )
+    dungeon = Dungeon(
+        id="dungeon_multi_enc",
+        name="Dungeon Multi Encounter",
+        description="",
+        difficulty=DifficultyType.EASY,
+        start_room="room_1",
+        end_room="room_2",
+        rooms=[
+            Room(
+                id="room_1",
+                name="Start",
+                description="",
+                is_visited=True,
+                is_cleared=False,
+                is_rested=False,
+                connections=["room_2"],
+                allowed_rests=[RestType.SHORT],
+                encounters=[encounter_1, encounter_2],
+            ),
+            Room(
+                id="room_2",
+                name="End",
+                description="",
+                is_visited=False,
+                is_cleared=True,
+                is_rested=False,
+                connections=["room_1"],
+                allowed_rests=[RestType.SHORT],
+            ),
+        ],
+    )
+
+    setup_actions = [
+        create_action(
+            ActionType.CREATE_PLAYER,
+            parameters={
+                "id": "player_1",
+                "name": "Player",
+                "description": "Recruit",
+                "race": _race(),
+                "archetype": _archetype(),
+                "weapons": [_weapon()],
+            },
+            actor_instance_id="system",
+        ),
+        create_action(
+            ActionType.CHOOSE_DUNGEON,
+            parameters={"dungeon": dungeon},
+            actor_instance_id="system",
+        ),
+        create_action(ActionType.START, actor_instance_id="system"),
+    ]
+    for action in setup_actions:
+        assert session.handle_action(action).ok is True
+
+    result = session.start_room_encounter()
+    assert result.ok is True
+    assert session.encounter.current_encounter is not None
+    assert session.encounter.current_encounter.id == "enc_1"
+
+    result = session.end_encounter()
+    assert result.ok is True
+    assert encounter_1.cleared is True
+    assert encounter_2.cleared is False
+    assert session.exploration.current_room is not None
+    assert session.exploration.current_room.is_cleared is False
+
+    result = session.start_room_encounter()
+    assert result.ok is True
+    assert session.encounter.current_encounter is not None
+    assert session.encounter.current_encounter.id == "enc_2"
+
+    result = session.end_encounter()
+    assert result.ok is True
+    assert encounter_2.cleared is True
+    assert session.exploration.current_room is not None
+    assert session.exploration.current_room.is_cleared is True
+    assert session.points == 30
+
+    result = session.start_room_encounter()
+    assert result.errors and "No uncleared encounters" in result.errors[0]
+
+
+def test_game_session_reused_enemy_id_across_encounters_can_leak_enemy_state() -> None:
+    session = _session()
+
+    shared_enemy = create_enemy(
+        id="enemy_shared",
+        name="Enemy Shared",
+        description="",
+        race=_race(),
+        archetype=_archetype(),
+        weapons=[_weapon()],
+        enemy_instance_id="enemy_inst_shared",
+    )
+    encounter_1 = Encounter(
+        id="enc_1",
+        name="Encounter One",
+        description="",
+        difficulty=DifficultyType.EASY,
+        cleared=False,
+        clear_reward=10,
+        enemies=[shared_enemy],
+    )
+    encounter_2 = Encounter(
+        id="enc_2",
+        name="Encounter Two",
+        description="",
+        difficulty=DifficultyType.EASY,
+        cleared=False,
+        clear_reward=10,
+        enemies=[shared_enemy],
+    )
+    dungeon = Dungeon(
+        id="dungeon_shared_enemy",
+        name="Dungeon Shared Enemy",
+        description="",
+        difficulty=DifficultyType.EASY,
+        start_room="room_1",
+        end_room="room_2",
+        rooms=[
+            Room(
+                id="room_1",
+                name="Start",
+                description="",
+                is_visited=True,
+                is_cleared=False,
+                is_rested=False,
+                connections=["room_2"],
+                allowed_rests=[RestType.SHORT],
+                encounters=[encounter_1, encounter_2],
+            ),
+            Room(
+                id="room_2",
+                name="End",
+                description="",
+                is_visited=False,
+                is_cleared=True,
+                is_rested=False,
+                connections=["room_1"],
+                allowed_rests=[RestType.SHORT],
+            ),
+        ],
+    )
+
+    setup_actions = [
+        create_action(
+            ActionType.CREATE_PLAYER,
+            parameters={
+                "id": "player_1",
+                "name": "Player",
+                "description": "Recruit",
+                "race": _race(),
+                "archetype": _archetype(),
+                "weapons": [_weapon()],
+            },
+            actor_instance_id="system",
+        ),
+        create_action(
+            ActionType.CHOOSE_DUNGEON,
+            parameters={"dungeon": dungeon},
+            actor_instance_id="system",
+        ),
+        create_action(ActionType.START, actor_instance_id="system"),
+    ]
+    for action in setup_actions:
+        assert session.handle_action(action).ok is True
+
+    assert session.start_room_encounter().ok is True
+    assert session.encounter.current_encounter is encounter_1
+    shared_enemy.hp = 0
+    assert session.end_encounter().ok is True
+
+    assert session.start_room_encounter().ok is True
+    assert session.encounter.current_encounter is encounter_2
+    assert encounter_2.enemies[0].id == "enemy_shared"
+    assert encounter_2.enemies[0].hp == 0
+
+
+def test_game_session_single_encounter_allows_duplicate_enemy_ids_with_unique_instances() -> None:
+    session = _session()
+
+    duplicate_enemy_1 = create_enemy(
+        id="enemy_dup",
+        name="Enemy Duplicate A",
+        description="",
+        race=_race(),
+        archetype=_archetype(),
+        weapons=[_weapon()],
+        enemy_instance_id="enemy_inst_1",
+    )
+    duplicate_enemy_2 = create_enemy(
+        id="enemy_dup",
+        name="Enemy Duplicate B",
+        description="",
+        race=_race(),
+        archetype=_archetype(),
+        weapons=[_weapon()],
+        enemy_instance_id="enemy_inst_2",
+    )
+    encounter = Encounter(
+        id="enc_dup",
+        name="Duplicate Enemy Encounter",
+        description="",
+        difficulty=DifficultyType.EASY,
+        cleared=False,
+        clear_reward=10,
+        enemies=[duplicate_enemy_1, duplicate_enemy_2],
+    )
+
+    setup_actions = [
+        create_action(
+            ActionType.CREATE_PLAYER,
+            parameters={
+                "id": "player_1",
+                "name": "Player",
+                "description": "Recruit",
+                "race": _race(),
+                "archetype": _archetype(),
+                "weapons": [_weapon()],
+            },
+            actor_instance_id="system",
+        ),
+        create_action(
+            ActionType.CHOOSE_DUNGEON,
+            parameters={"dungeon": _dungeon()},
+            actor_instance_id="system",
+        ),
+        create_action(ActionType.START, actor_instance_id="system"),
+    ]
+    for action in setup_actions:
+        assert session.handle_action(action).ok is True
+
+    result = session.start_encounter(encounter)
+    assert result.ok is True
+    assert session.encounter.current_encounter is not None
+    encounter_enemies = session.encounter.current_encounter.enemies
+    assert len(encounter_enemies) == 2
+    assert [enemy.id for enemy in encounter_enemies] == ["enemy_dup", "enemy_dup"]
+
+    assigned_instance_ids = [enemy.enemy_instance_id for enemy in encounter_enemies]
+    assert assigned_instance_ids == ["enemy_1", "enemy_2"]
+    assert len(set(assigned_instance_ids)) == 2
