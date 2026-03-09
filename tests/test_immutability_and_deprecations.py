@@ -1,9 +1,8 @@
 from dataclasses import FrozenInstanceError
-from pathlib import Path
-
 import pytest
 
-from core.data_engine.data_loader import DataLoader, load_game_data
+from core.data_engine import data_loader
+from core.data_engine.data_loader import DataLoader
 from game.combat.attack import Attack
 from game.combat.spell import Spell
 from game.combat.status_effect import StatusEffect
@@ -125,11 +124,8 @@ def test_race_archetype_weapon_are_frozen_and_normalize_to_tuples() -> None:
 
 
 def test_load_hydrated_is_removed() -> None:
-    loader = DataLoader(data_dir=Path("data"), schema_dir=Path("data/schemata"))
-    with pytest.raises(RuntimeError, match="has been removed"):
-        loader.load_hydrated()
+    assert not hasattr(DataLoader, "load_hydrated")
 
 
 def test_load_game_data_is_removed() -> None:
-    with pytest.raises(RuntimeError, match="has been removed"):
-        load_game_data(data_dir=Path("data"), schema_dir=Path("data/schemata"))
+    assert not hasattr(data_loader, "load_game_data")

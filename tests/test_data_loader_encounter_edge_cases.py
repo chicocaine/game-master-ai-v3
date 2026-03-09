@@ -262,9 +262,7 @@ def test_data_loader_legacy_hydrated_path_is_removed(tmp_path: Path) -> None:
     data_dir = _copy_data_dir(tmp_path)
 
     loader = DataLoader(data_dir=data_dir, schema_dir=data_dir / "schemata")
-
-    with pytest.raises(RuntimeError, match="has been removed"):
-        loader.load_hydrated()
+    assert not hasattr(loader, "load_hydrated")
 
     catalog = loader.load_catalog()
     assert "dng_ember_ruins" in catalog.dungeon_templates

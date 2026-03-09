@@ -168,11 +168,6 @@ class DataLoader:
 					for enemy_id in encounter.get("enemy_ids", []):
 						self._require_id(idx["enemies"], enemy_id, "enemies")
 
-	def load_hydrated(self) -> Dict[str, Any]:
-		raise RuntimeError(
-			"DataLoader.load_hydrated() has been removed. Use load_catalog() and instantiate runtime objects via factories."
-		)
-
 	def validate(self) -> None:
 		raw = self.load_raw_data()
 		self._validate_cross_references(raw)
@@ -376,17 +371,6 @@ class DataLoader:
 			)
 
 		return Catalog(enemy_templates=enemy_templates, dungeon_templates=dungeon_templates)
-
-
-def load_game_data(
-	data_dir: Path | str = Path("data"),
-	schema_dir: Optional[Path | str] = None,
-	validate_schema: bool = True,
-) -> Dict[str, Any]:
-	"""Removed legacy hydrated loader wrapper."""
-	raise RuntimeError(
-		"load_game_data() has been removed. Use load_game_catalog() and instantiate runtime objects via factories."
-	)
 
 
 def load_game_catalog(
