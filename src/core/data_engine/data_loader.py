@@ -417,49 +417,200 @@ class DataLoader:
 		self._validate_cross_references(raw)
 
 	def load_catalog(self) -> Catalog:
-		"""Load immutable-ish templates used to instantiate mutable runtime objects."""
-		hydrated = self.load_hydrated()
+		"""Load catalog templates for runtime instantiation without hydrating mutable dungeon state."""
+		raw = self.load_raw_data()
+		self._validate_cross_references(raw)
 
-		enemy_templates = {
-			enemy_id: EnemyTemplate(id=enemy_id, enemy=enemy)
-			for enemy_id, enemy in hydrated["enemies"].items()
-		}
+		status_effects: Dict[str, StatusEffect] = {}
+		for row in raw["status_effects"]:
+			effect_id = row["id"]
+			status_effects[effect_id] = StatusEffect(
+				id=effect_id,
+				name=str(row.get("name", "")),
+				description=str(row.get("description", "")),
+				type=StatusEffectType(str(row.get("type", "control"))),
+				parameters=dict(row.get("parameters", {})),
+			)
+
+		def _hydrate_applied_effects(effect_refs: List[dict]) -> List[dict]:
+			hydrated: List[dict] = []
+			for effect_ref in effect_refs:
+				effect_id = str(effect_ref.get("status_effect_id", ""))
+				effect = status_effects[effect_id]
+				hydrated.append(
+					{
+						"status_effect": effect,
+						"duration": int(effect_ref.get("duration", 0)),
+					}
+				)
+			return hydrated
+
+		attacks: Dict[str, Attack] = {}
+		for row in raw["attacks"]:
+			params = dict(row.get("parameters", {}))
+			applied_refs = list(params.get("applied_status_effects", []))
+			params["applied_status_effects"] = _hydrate_applied_effects(applied_refs)
+			attacks[row["id"]] = Attack(
+				id=row["id"],
+				name=str(row.get("name", "")),
+				description=str(row.get("description", "")),
+				type=AttackType(str(row.get("type", "melee"))),
+				parameters=params,
+			)
+
+		spells: Dict[str, Spell] = {}
+		for row in raw["spells"]:
+			params = dict(row.get("parameters", {}))
+			applied_refs = list(params.get("applied_status_effects", []))
+			params["applied_status_effects"] = _hydrate_applied_effects(applied_refs)
+			spells[row["id"]] = Spell(
+				id=row["id"],
+				name=str(row.get("name", "")),
+				description=str(row.get("description", "")),
+				type=SpellType(str(row.get("type", "attack"))),
+				spell_cost=int(row.get("spell_cost", 0)),
+				parameters=params,
+			)
+
+		weapons: Dict[str, Weapon] = {}
+		for row in raw["weapons"]:
+			weapons[row["id"]] = Weapon(
+				id=row["id"],
+				name=str(row.get("name", "")),
+				description=str(row.get("description", "")),
+				proficiency=WeaponProficiency(str(row.get("proficiency", "simple"))),
+				handling=WeaponHandling(str(row.get("handling", "one_handed"))),
+				weight_class=WeaponWeightClass(str(row.get("weight_class", "light"))),
+				delivery=WeaponDelivery(str(row.get("delivery", "melee"))),
+				magic_type=WeaponMagicType(str(row.get("magic_type", "mundane"))),
+				known_attacks=[attacks[item_id] for item_id in row.get("known_attack_ids", [])],
+				known_spells=[spells[item_id] for item_id in row.get("known_spell_ids", [])],
+			)
+
+		races: Dict[str, Race] = {}
+		for row in raw["races"]:
+			races[row["id"]] = Race(
+				id=row["id"],
+				name=str(row.get("name", "")),
+				description=str(row.get("description", "")),
+				base_hp=int(row.get("base_hp", 0)),
+				base_AC=int(row.get("base_AC", 0)),
+				base_spell_slots=int(row.get("base_spell_slots", 0)),
+				resistances=[DamageType(item) for item in row.get("resistances", [])],
+				immunities=[DamageType(item) for item in row.get("immunities", [])],
+				vulnerabilities=[DamageType(item) for item in row.get("vulnerabilities", [])],
+				cc_immunities=[ControlType(item) for item in row.get("cc_immunities", [])],
+				archetype_constraints=list(row.get("archetype_constraints", [])),
+				known_spells=[spells[item_id] for item_id in row.get("known_spell_ids", [])],
+				known_attacks=[attacks[item_id] for item_id in row.get("known_attack_ids", [])],
+			)
+
+		archetypes: Dict[str, Archetype] = {}
+		for row in raw["archetypes"]:
+			constraints = dict(row.get("weapon_constraints", {}))
+			archetypes[row["id"]] = Archetype(
+				id=row["id"],
+				name=str(row.get("name", "")),
+				description=str(row.get("description", "")),
+				hp_mod=int(row.get("hp_mod", 0)),
+				AC_mod=int(row.get("AC_mod", 0)),
+				spell_slot_mod=int(row.get("spell_slot_mod", 0)),
+				initiative_mod=int(row.get("initiative_mod", 0)),
+				resistances=[DamageType(item) for item in row.get("resistances", [])],
+				immunities=[DamageType(item) for item in row.get("immunities", [])],
+				vulnerabilities=[DamageType(item) for item in row.get("vulnerabilities", [])],
+				cc_immunities=[ControlType(item) for item in row.get("cc_immunities", [])],
+				weapon_constraints=WeaponConstraints(
+					proficiency=[WeaponProficiency(item) for item in constraints.get("proficiency", [])],
+					handling=[WeaponHandling(item) for item in constraints.get("handling", [])],
+					weight_class=[WeaponWeightClass(item) for item in constraints.get("weight_class", [])],
+					delivery=[WeaponDelivery(item) for item in constraints.get("delivery", [])],
+					magic_type=[WeaponMagicType(item) for item in constraints.get("magic_type", [])],
+				),
+				known_spells=[spells[item_id] for item_id in row.get("known_spell_ids", [])],
+				known_attacks=[attacks[item_id] for item_id in row.get("known_attack_ids", [])],
+			)
+
+		def _hydrate_active_status_effects(payload: List[dict]) -> List[StatusEffectInstance]:
+			instances: List[StatusEffectInstance] = []
+			for row in payload:
+				effect_id = str(row.get("status_effect_id", ""))
+				instances.append(
+					StatusEffectInstance(
+						status_effect=status_effects[effect_id],
+						duration=int(row.get("duration", 0)),
+					)
+				)
+			return instances
+
+		enemy_templates: Dict[str, EnemyTemplate] = {}
+		for row in raw["enemies"]:
+			enemy_id = row["id"]
+			enemy = Enemy(
+				id=enemy_id,
+				name=str(row.get("name", "")),
+				description=str(row.get("description", "")),
+				race=races[row["race_id"]],
+				archetype=archetypes[row["archetype_id"]],
+				hp=int(row.get("hp", 0)),
+				max_hp=int(row.get("max_hp", 0)),
+				base_AC=int(row.get("base_AC", 0)),
+				AC=int(row.get("AC", 0)),
+				spell_slots=int(row.get("spell_slots", 0)),
+				max_spell_slots=int(row.get("max_spell_slots", 0)),
+				initiative_mod=int(row.get("initiative_mod", 0)),
+				attack_modifier_bonus=int(row.get("attack_modifier_bonus", 0)),
+				active_status_effects=_hydrate_active_status_effects(
+					row.get("active_status_effects", [])
+				),
+				weapons=[weapons[item_id] for item_id in row.get("weapon_ids", [])],
+				known_attacks=[attacks[item_id] for item_id in row.get("known_attack_ids", [])],
+				known_spells=[spells[item_id] for item_id in row.get("known_spell_ids", [])],
+				resistances=[DamageType(item) for item in row.get("resistances", [])],
+				immunities=[DamageType(item) for item in row.get("immunities", [])],
+				vulnerabilities=[DamageType(item) for item in row.get("vulnerabilities", [])],
+				cc_immunities=[ControlType(item) for item in row.get("cc_immunities", [])],
+				enemy_instance_id="",
+				persona=str(row.get("persona", "")),
+			)
+			enemy_templates[enemy_id] = EnemyTemplate(id=enemy_id, enemy=enemy)
 
 		dungeon_templates: Dict[str, DungeonTemplate] = {}
-		for dungeon in hydrated["dungeons"].values():
+		for dungeon_row in raw["dungeons"]:
 			room_templates: List[RoomTemplate] = []
-			for room in dungeon.rooms:
+			for room_row in dungeon_row.get("rooms", []):
 				encounter_templates: List[EncounterTemplate] = []
-				for encounter in room.encounters:
+				for encounter_row in room_row.get("encounters", []):
 					encounter_templates.append(
 						EncounterTemplate(
-							id=encounter.id,
-							name=encounter.name,
-							description=encounter.description,
-							difficulty=encounter.difficulty,
-							clear_reward=encounter.clear_reward,
-							enemy_template_ids=tuple(enemy.id for enemy in encounter.enemies),
+							id=str(encounter_row.get("id", "")),
+							name=str(encounter_row.get("name", "")),
+							description=str(encounter_row.get("description", "")),
+							difficulty=DifficultyType(str(encounter_row.get("difficulty", "easy"))),
+							clear_reward=int(encounter_row.get("clear_reward", 0)),
+							enemy_template_ids=tuple(str(enemy_id) for enemy_id in encounter_row.get("enemy_ids", [])),
 						)
 					)
 
 				room_templates.append(
 					RoomTemplate(
-						id=room.id,
-						name=room.name,
-						description=room.description,
-						connections=tuple(room.connections),
+						id=str(room_row.get("id", "")),
+						name=str(room_row.get("name", "")),
+						description=str(room_row.get("description", "")),
+						connections=tuple(str(item) for item in room_row.get("connection_room_ids", [])),
 						encounters=tuple(encounter_templates),
-						allowed_rests=tuple(room.allowed_rests),
+						allowed_rests=tuple(RestType(item) for item in room_row.get("allowed_rests", [])),
 					)
 				)
 
-			dungeon_templates[dungeon.id] = DungeonTemplate(
-				id=dungeon.id,
-				name=dungeon.name,
-				description=dungeon.description,
-				difficulty=dungeon.difficulty,
-				start_room=dungeon.start_room,
-				end_room=dungeon.end_room,
+			dungeon_id = str(dungeon_row.get("id", ""))
+			dungeon_templates[dungeon_id] = DungeonTemplate(
+				id=dungeon_id,
+				name=str(dungeon_row.get("name", "")),
+				description=str(dungeon_row.get("description", "")),
+				difficulty=DifficultyType(str(dungeon_row.get("difficulty", "easy"))),
+				start_room=str(dungeon_row.get("start_room_id", "")),
+				end_room=str(dungeon_row.get("end_room_id", "")),
 				rooms=tuple(room_templates),
 			)
 

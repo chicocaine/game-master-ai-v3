@@ -252,3 +252,17 @@ def test_data_loader_catalog_to_instance_factory_avoids_runtime_enemy_leak(tmp_p
     assert enemy_a.instance_id == "enemy_1"
     assert enemy_b.instance_id == "enemy_2"
     assert enemy_b.hp == before_b
+
+
+def test_data_loader_catalog_does_not_depend_on_load_hydrated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    data_dir = _copy_data_dir(tmp_path)
+
+    def _fail_load_hydrated(self):
+        raise AssertionError("load_catalog should not call load_hydrated")
+
+    monkeypatch.setattr(DataLoader, "load_hydrated", _fail_load_hydrated)
+
+    catalog = DataLoader(data_dir=data_dir, schema_dir=data_dir / "schemata").load_catalog()
+
+    assert "dng_ember_ruins" in catalog.dungeon_templates
+    assert "enemy_goblin_skirmisher" in catalog.enemy_templates
