@@ -52,8 +52,9 @@ def create_player(
 	race,
 	archetype,
 	weapons,
-	player_instance_id: str,
+	player_instance_id: str = "",
 ) -> Player:
+	assigned_instance_id = player_instance_id or "player_1"
 	entity = Entity.create(
 		id=id,
 		name=name,
@@ -84,5 +85,5 @@ def create_player(
 		immunities=entity.immunities,
 		vulnerabilities=entity.vulnerabilities,
 		cc_immunities=entity.cc_immunities,
-		player_instance_id=player_instance_id,
+		player_instance_id=assigned_instance_id,
 	)

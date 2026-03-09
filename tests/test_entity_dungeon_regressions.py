@@ -1,5 +1,5 @@
 from game.actors.enemy import Enemy
-from game.actors.player import Player
+from game.actors.player import Player, create_player
 from game.combat.attack import Attack
 from game.combat.spell import Spell
 from game.dungeons.dungeon import Encounter
@@ -182,6 +182,19 @@ def test_enemy_from_dict_preserves_attack_modifier_bonus() -> None:
     )
 
     assert enemy.attack_modifier_bonus == 5
+
+
+def test_create_player_assigns_default_instance_id_when_missing() -> None:
+    player = create_player(
+        id="player_default",
+        name="Player Default",
+        description="",
+        race=_race(),
+        archetype=_archetype(),
+        weapons=[_weapon()],
+    )
+
+    assert player.player_instance_id == "player_1"
 
 
 def test_encounter_enemy_round_trip_and_legacy_id_list() -> None:

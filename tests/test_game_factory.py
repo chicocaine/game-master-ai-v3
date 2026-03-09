@@ -167,3 +167,27 @@ def test_game_factory_create_session_runtime_enemies_do_not_leak_between_encount
     assert enemy_a.enemy_instance_id == "enemy_1"
     assert enemy_b.enemy_instance_id == "enemy_2"
     assert enemy_b.hp == before_b
+
+
+def test_game_factory_assigns_sequential_player_instance_ids_for_unassigned_players() -> None:
+    catalog = _catalog()
+    player_a = create_player(
+        id="player_a",
+        name="Player A",
+        description="",
+        race=_race(),
+        archetype=_archetype(),
+        weapons=[_weapon()],
+    )
+    player_b = create_player(
+        id="player_b",
+        name="Player B",
+        description="",
+        race=_race(),
+        archetype=_archetype(),
+        weapons=[_weapon()],
+    )
+
+    session = GameFactory.create_session(catalog, party=[player_a, player_b])
+
+    assert [player.player_instance_id for player in session.party] == ["player_1", "player_2"]

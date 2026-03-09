@@ -14,10 +14,17 @@ class GameFactory:
     @staticmethod
     def _assign_player_instance_ids(players: Iterable[Player]) -> list[Player]:
         assigned: list[Player] = []
+        used_ids: set[str] = set()
         for index, player in enumerate(players, start=1):
             cloned = deepcopy(player)
-            if not getattr(cloned, "player_instance_id", ""):
-                cloned.player_instance_id = f"player_{index}"
+            existing_id = str(getattr(cloned, "player_instance_id", "") or "")
+            if not existing_id or existing_id in used_ids:
+                existing_id = f"player_{index}"
+                while existing_id in used_ids:
+                    index += 1
+                    existing_id = f"player_{index}"
+                cloned.player_instance_id = existing_id
+            used_ids.add(existing_id)
             assigned.append(cloned)
         return assigned
 

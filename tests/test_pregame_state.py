@@ -246,6 +246,31 @@ def test_handle_remove_and_edit_player_by_instance_id() -> None:
     assert result.errors and "was not found" in result.errors[0]
 
 
+def test_handle_remove_player_compacts_player_instance_ids() -> None:
+    pregame = PreGameState()
+    session = _session()
+
+    for idx in range(3):
+        result = pregame.handle_create_player(
+            session,
+            id=f"player_{idx + 1}",
+            name=f"Player {idx + 1}",
+            description="",
+            race=_race(),
+            archetype=_archetype(),
+            weapons=[_weapon()],
+        )
+        assert result.ok is True
+
+    assert [player.player_instance_id for player in session.party] == ["player_1", "player_2", "player_3"]
+
+    result = pregame.handle_remove_player(session, "player_2")
+    assert result.ok is True
+
+    assert [player.player_instance_id for player in session.party] == ["player_1", "player_2"]
+    assert [player.name for player in session.party] == ["Player 1", "Player 3"]
+
+
 def test_handle_choose_dungeon_validates_shape() -> None:
     pregame = PreGameState()
     session = _session()

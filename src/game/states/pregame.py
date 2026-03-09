@@ -103,6 +103,11 @@ class PreGameState:
                 return index
         return -1
 
+    @staticmethod
+    def _compact_player_instance_ids(session: "GameSession") -> None:
+        for index, player in enumerate(session.party, start=1):
+            player.player_instance_id = f"player_{index}"
+
     def handle_create_player(
         self,
         session: "GameSession",
@@ -131,6 +136,7 @@ class PreGameState:
         if player_index < 0:
             return ActionResult.failure(errors=[f"Player '{player_instance_id}' was not found in party."])
         del session.party[player_index]
+        self._compact_player_instance_ids(session)
         return ActionResult.success()
 
     def handle_edit_player(
