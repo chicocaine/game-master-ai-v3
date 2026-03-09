@@ -1,18 +1,15 @@
 from __future__ import annotations
 
 import json
-import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from core.data_engine.json_schema_validator import JsonSchemaValidator
 from game.actors.enemy import Enemy
-from game.actors.player import Player
 from game.catalog.models import Catalog, DungeonTemplate, EncounterTemplate, EnemyTemplate, RoomTemplate
 from game.combat.attack import Attack
 from game.combat.spell import Spell
 from game.combat.status_effect import StatusEffect, StatusEffectInstance
-from game.dungeons.dungeon import Dungeon, Encounter, Room
 from game.entity.blocks.archetype import Archetype, WeaponConstraints
 from game.entity.blocks.race import Race
 from game.entity.blocks.weapon import Weapon
@@ -172,251 +169,9 @@ class DataLoader:
 						self._require_id(idx["enemies"], enemy_id, "enemies")
 
 	def load_hydrated(self) -> Dict[str, Any]:
-		warnings.warn(
-			"DataLoader.load_hydrated() is deprecated; use load_catalog() + factories for runtime instances.",
-			DeprecationWarning,
-			stacklevel=2,
+		raise RuntimeError(
+			"DataLoader.load_hydrated() has been removed. Use load_catalog() and instantiate runtime objects via factories."
 		)
-		raw = self.load_raw_data()
-		self._validate_cross_references(raw)
-
-		status_effects: Dict[str, StatusEffect] = {}
-		for row in raw["status_effects"]:
-			effect_id = row["id"]
-			status_effects[effect_id] = StatusEffect(
-				id=effect_id,
-				name=str(row.get("name", "")),
-				description=str(row.get("description", "")),
-				type=StatusEffectType(str(row.get("type", "control"))),
-				parameters=dict(row.get("parameters", {})),
-			)
-
-		def _hydrate_applied_effects(effect_refs: List[dict]) -> List[dict]:
-			hydrated: List[dict] = []
-			for effect_ref in effect_refs:
-				effect_id = str(effect_ref.get("status_effect_id", ""))
-				effect = status_effects[effect_id]
-				hydrated.append(
-					{
-						"status_effect": effect,
-						"duration": int(effect_ref.get("duration", 0)),
-					}
-				)
-			return hydrated
-
-		attacks: Dict[str, Attack] = {}
-		for row in raw["attacks"]:
-			params = dict(row.get("parameters", {}))
-			applied_refs = list(params.get("applied_status_effects", []))
-			params["applied_status_effects"] = _hydrate_applied_effects(applied_refs)
-			attacks[row["id"]] = Attack(
-				id=row["id"],
-				name=str(row.get("name", "")),
-				description=str(row.get("description", "")),
-				type=AttackType(str(row.get("type", "melee"))),
-				parameters=params,
-			)
-
-		spells: Dict[str, Spell] = {}
-		for row in raw["spells"]:
-			params = dict(row.get("parameters", {}))
-			applied_refs = list(params.get("applied_status_effects", []))
-			params["applied_status_effects"] = _hydrate_applied_effects(applied_refs)
-			spells[row["id"]] = Spell(
-				id=row["id"],
-				name=str(row.get("name", "")),
-				description=str(row.get("description", "")),
-				type=SpellType(str(row.get("type", "attack"))),
-				spell_cost=int(row.get("spell_cost", 0)),
-				parameters=params,
-			)
-
-		weapons: Dict[str, Weapon] = {}
-		for row in raw["weapons"]:
-			weapons[row["id"]] = Weapon(
-				id=row["id"],
-				name=str(row.get("name", "")),
-				description=str(row.get("description", "")),
-				proficiency=WeaponProficiency(str(row.get("proficiency", "simple"))),
-				handling=WeaponHandling(str(row.get("handling", "one_handed"))),
-				weight_class=WeaponWeightClass(str(row.get("weight_class", "light"))),
-				delivery=WeaponDelivery(str(row.get("delivery", "melee"))),
-				magic_type=WeaponMagicType(str(row.get("magic_type", "mundane"))),
-				known_attacks=[attacks[item_id] for item_id in row.get("known_attack_ids", [])],
-				known_spells=[spells[item_id] for item_id in row.get("known_spell_ids", [])],
-			)
-
-		races: Dict[str, Race] = {}
-		for row in raw["races"]:
-			races[row["id"]] = Race(
-				id=row["id"],
-				name=str(row.get("name", "")),
-				description=str(row.get("description", "")),
-				base_hp=int(row.get("base_hp", 0)),
-				base_AC=int(row.get("base_AC", 0)),
-				base_spell_slots=int(row.get("base_spell_slots", 0)),
-				resistances=[DamageType(item) for item in row.get("resistances", [])],
-				immunities=[DamageType(item) for item in row.get("immunities", [])],
-				vulnerabilities=[DamageType(item) for item in row.get("vulnerabilities", [])],
-				cc_immunities=[ControlType(item) for item in row.get("cc_immunities", [])],
-				archetype_constraints=list(row.get("archetype_constraints", [])),
-				known_spells=[spells[item_id] for item_id in row.get("known_spell_ids", [])],
-				known_attacks=[attacks[item_id] for item_id in row.get("known_attack_ids", [])],
-			)
-
-		archetypes: Dict[str, Archetype] = {}
-		for row in raw["archetypes"]:
-			constraints = dict(row.get("weapon_constraints", {}))
-			archetypes[row["id"]] = Archetype(
-				id=row["id"],
-				name=str(row.get("name", "")),
-				description=str(row.get("description", "")),
-				hp_mod=int(row.get("hp_mod", 0)),
-				AC_mod=int(row.get("AC_mod", 0)),
-				spell_slot_mod=int(row.get("spell_slot_mod", 0)),
-				initiative_mod=int(row.get("initiative_mod", 0)),
-				resistances=[DamageType(item) for item in row.get("resistances", [])],
-				immunities=[DamageType(item) for item in row.get("immunities", [])],
-				vulnerabilities=[DamageType(item) for item in row.get("vulnerabilities", [])],
-				cc_immunities=[ControlType(item) for item in row.get("cc_immunities", [])],
-				weapon_constraints=WeaponConstraints(
-					proficiency=[WeaponProficiency(item) for item in constraints.get("proficiency", [])],
-					handling=[WeaponHandling(item) for item in constraints.get("handling", [])],
-					weight_class=[WeaponWeightClass(item) for item in constraints.get("weight_class", [])],
-					delivery=[WeaponDelivery(item) for item in constraints.get("delivery", [])],
-					magic_type=[WeaponMagicType(item) for item in constraints.get("magic_type", [])],
-				),
-				known_spells=[spells[item_id] for item_id in row.get("known_spell_ids", [])],
-				known_attacks=[attacks[item_id] for item_id in row.get("known_attack_ids", [])],
-			)
-
-		def _hydrate_active_status_effects(payload: List[dict]) -> List[StatusEffectInstance]:
-			instances: List[StatusEffectInstance] = []
-			for row in payload:
-				effect_id = str(row.get("status_effect_id", ""))
-				instances.append(
-					StatusEffectInstance(
-						status_effect=status_effects[effect_id],
-						duration=int(row.get("duration", 0)),
-					)
-				)
-			return instances
-
-		players: Dict[str, Player] = {}
-		for row in raw["players"]:
-			race = races[row["race_id"]]
-			archetype = archetypes[row["archetype_id"]]
-			players[row["id"]] = Player(
-				id=row["id"],
-				name=str(row.get("name", "")),
-				description=str(row.get("description", "")),
-				race=race,
-				archetype=archetype,
-				hp=int(row.get("hp", 0)),
-				max_hp=int(row.get("max_hp", 0)),
-				base_AC=int(row.get("base_AC", 0)),
-				AC=int(row.get("AC", 0)),
-				spell_slots=int(row.get("spell_slots", 0)),
-				max_spell_slots=int(row.get("max_spell_slots", 0)),
-				initiative_mod=int(row.get("initiative_mod", 0)),
-				attack_modifier_bonus=int(row.get("attack_modifier_bonus", 0)),
-				active_status_effects=_hydrate_active_status_effects(
-					row.get("active_status_effects", [])
-				),
-				weapons=[weapons[item_id] for item_id in row.get("weapon_ids", [])],
-				known_attacks=[attacks[item_id] for item_id in row.get("known_attack_ids", [])],
-				known_spells=[spells[item_id] for item_id in row.get("known_spell_ids", [])],
-				resistances=[DamageType(item) for item in row.get("resistances", [])],
-				immunities=[DamageType(item) for item in row.get("immunities", [])],
-				vulnerabilities=[DamageType(item) for item in row.get("vulnerabilities", [])],
-				cc_immunities=[ControlType(item) for item in row.get("cc_immunities", [])],
-				player_instance_id=str(row.get("player_instance_id", "")),
-			)
-
-		enemies: Dict[str, Enemy] = {}
-		for row in raw["enemies"]:
-			race = races[row["race_id"]]
-			archetype = archetypes[row["archetype_id"]]
-			enemies[row["id"]] = Enemy(
-				id=row["id"],
-				name=str(row.get("name", "")),
-				description=str(row.get("description", "")),
-				race=race,
-				archetype=archetype,
-				hp=int(row.get("hp", 0)),
-				max_hp=int(row.get("max_hp", 0)),
-				base_AC=int(row.get("base_AC", 0)),
-				AC=int(row.get("AC", 0)),
-				spell_slots=int(row.get("spell_slots", 0)),
-				max_spell_slots=int(row.get("max_spell_slots", 0)),
-				initiative_mod=int(row.get("initiative_mod", 0)),
-				attack_modifier_bonus=int(row.get("attack_modifier_bonus", 0)),
-				active_status_effects=_hydrate_active_status_effects(
-					row.get("active_status_effects", [])
-				),
-				weapons=[weapons[item_id] for item_id in row.get("weapon_ids", [])],
-				known_attacks=[attacks[item_id] for item_id in row.get("known_attack_ids", [])],
-				known_spells=[spells[item_id] for item_id in row.get("known_spell_ids", [])],
-				resistances=[DamageType(item) for item in row.get("resistances", [])],
-				immunities=[DamageType(item) for item in row.get("immunities", [])],
-				vulnerabilities=[DamageType(item) for item in row.get("vulnerabilities", [])],
-				cc_immunities=[ControlType(item) for item in row.get("cc_immunities", [])],
-				enemy_instance_id=str(row.get("enemy_instance_id", "")),
-				persona=str(row.get("persona", "")),
-			)
-
-		dungeons: Dict[str, Dungeon] = {}
-		for row in raw["dungeons"]:
-			rooms: List[Room] = []
-			for room_row in row.get("rooms", []):
-				encounters: List[Encounter] = []
-				for enc_row in room_row.get("encounters", []):
-					encounter = Encounter(
-						id=str(enc_row.get("id", "")),
-						name=str(enc_row.get("name", "")),
-						description=str(enc_row.get("description", "")),
-						difficulty=DifficultyType(str(enc_row.get("difficulty", "easy"))),
-						cleared=bool(enc_row.get("cleared", False)),
-						clear_reward=int(enc_row.get("clear_reward", 0)),
-						enemies=[enemies[item_id] for item_id in enc_row.get("enemy_ids", [])],
-					)
-					encounters.append(encounter)
-
-				room = Room(
-					id=str(room_row.get("id", "")),
-					name=str(room_row.get("name", "")),
-					description=str(room_row.get("description", "")),
-					is_visited=bool(room_row.get("is_visited", False)),
-					is_cleared=bool(room_row.get("is_cleared", False)),
-					is_rested=bool(room_row.get("is_rested", False)),
-					connections=[str(item) for item in room_row.get("connection_room_ids", [])],
-					encounters=encounters,
-					allowed_rests=[RestType(item) for item in room_row.get("allowed_rests", [])],
-				)
-				rooms.append(room)
-
-			dungeon = Dungeon(
-				id=str(row.get("id", "")),
-				name=str(row.get("name", "")),
-				description=str(row.get("description", "")),
-				difficulty=DifficultyType(str(row.get("difficulty", "easy"))),
-				start_room=str(row.get("start_room_id", "")),
-				end_room=str(row.get("end_room_id", "")),
-				rooms=rooms,
-			)
-			dungeons[dungeon.id] = dungeon
-
-		return {
-			"status_effects": status_effects,
-			"attacks": attacks,
-			"spells": spells,
-			"weapons": weapons,
-			"races": races,
-			"archetypes": archetypes,
-			"players": players,
-			"enemies": enemies,
-			"dungeons": dungeons,
-		}
 
 	def validate(self) -> None:
 		raw = self.load_raw_data()
@@ -628,24 +383,10 @@ def load_game_data(
 	schema_dir: Optional[Path | str] = None,
 	validate_schema: bool = True,
 ) -> Dict[str, Any]:
-	"""Convenience wrapper to load and hydrate all game data."""
-	warnings.warn(
-		"load_game_data() is deprecated; use load_game_catalog() with GameFactory/InstanceFactory.",
-		DeprecationWarning,
-		stacklevel=2,
+	"""Removed legacy hydrated loader wrapper."""
+	raise RuntimeError(
+		"load_game_data() has been removed. Use load_game_catalog() and instantiate runtime objects via factories."
 	)
-	loader = DataLoader(
-		data_dir=data_dir,
-		schema_dir=schema_dir,
-		validate_schema=validate_schema,
-	)
-	with warnings.catch_warnings():
-		warnings.filterwarnings(
-			"ignore",
-			message=r"DataLoader\.load_hydrated\(\) is deprecated;",
-			category=DeprecationWarning,
-		)
-		return loader.load_hydrated()
 
 
 def load_game_catalog(

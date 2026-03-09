@@ -124,13 +124,12 @@ def test_race_archetype_weapon_are_frozen_and_normalize_to_tuples() -> None:
         archetype.name = "Renamed"
 
 
-def test_load_hydrated_emits_deprecation_warning() -> None:
+def test_load_hydrated_is_removed() -> None:
     loader = DataLoader(data_dir=Path("data"), schema_dir=Path("data/schemata"))
-    with pytest.deprecated_call(match="load_hydrated"):
+    with pytest.raises(RuntimeError, match="has been removed"):
         loader.load_hydrated()
 
 
-def test_load_game_data_emits_deprecation_warning() -> None:
-    with pytest.deprecated_call(match="load_game_data"):
-        payload = load_game_data(data_dir=Path("data"), schema_dir=Path("data/schemata"))
-    assert "dungeons" in payload
+def test_load_game_data_is_removed() -> None:
+    with pytest.raises(RuntimeError, match="has been removed"):
+        load_game_data(data_dir=Path("data"), schema_dir=Path("data/schemata"))
