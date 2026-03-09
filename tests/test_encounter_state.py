@@ -174,6 +174,69 @@ def test_start_and_advance_turn_placeholder_flow() -> None:
     assert state.current_turn_index == 0
 
 
+def test_start_encounter_uses_initiative_ordering() -> None:
+    session = _session_with_party()
+    state = EncounterState()
+    encounter = _encounter()
+
+    with patch("game.combat.initiative.roll_for_initiative", side_effect=[3, 18]):
+        result = state.start_encounter(session, encounter)
+
+    assert result.ok is True
+    assert state.turn_order == ["enemy_1", "player_1"]
+    assert state.current_turn_index == 0
+
+
+def test_start_encounter_uses_initiative_modifiers_when_rolls_tie() -> None:
+    session = _session_with_party()
+    state = EncounterState()
+    encounter = _encounter()
+    encounter.enemies[0].initiative_mod = 4
+
+    with patch("game.combat.initiative.roll_for_initiative", side_effect=[10, 10]):
+        result = state.start_encounter(session, encounter)
+
+    assert result.ok is True
+    assert state.turn_order[0] == "enemy_1"
+
+
+def test_advance_turn_skips_control_locked_actor() -> None:
+    session = _session_with_party()
+    state = EncounterState()
+    encounter = _encounter()
+    assert state.start_encounter(session, encounter).ok is True
+
+    encounter.enemies[0].active_status_effects.append(_control_effect(ControlType.STUNNED, "stun_enemy"))
+
+    result = state.handle_end_turn(session, create_action(ActionType.END_TURN, actor_instance_id="player_1"))
+    assert result.ok is True
+    assert state.turn_order[state.current_turn_index] == "player_1"
+    assert any(event["type"] == "turn_skipped" for event in result.events)
+
+
+def test_turn_started_event_includes_enemy_persona() -> None:
+    session = _session_with_party()
+    state = EncounterState()
+    encounter = _encounter()
+    encounter.enemies[0].initiative_mod = 0
+    encounter.enemies[0].persona = "aggressive_brute"
+
+    with patch("game.combat.initiative.roll_for_initiative", side_effect=[5, 5]):
+        result = state.start_encounter(session, encounter)
+    assert result.ok is True
+    assert state.turn_order[0] == "player_1"
+
+    # Player ends turn, enemy turn starts and should include persona context.
+    result = state.handle_end_turn(
+        session,
+        create_action(ActionType.END_TURN, actor_instance_id="player_1"),
+    )
+    assert result.ok is True
+    turn_started_events = [event for event in result.events if event["type"] == "turn_started"]
+    assert turn_started_events
+    assert turn_started_events[0].get("persona") == "aggressive_brute"
+
+
 def test_action_handlers_resolve_combat_actions() -> None:
     session = _session_with_party()
     state = EncounterState()

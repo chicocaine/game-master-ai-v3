@@ -175,6 +175,10 @@ def test_game_session_routes_pregame_actions() -> None:
     result = session.handle_action(start_action)
     assert result.ok is True
     assert session.state is GameState.EXPLORATION
+    event_types = [event["type"] for event in result.events]
+    assert "action_submitted" in event_types
+    assert "action_validated" in event_types
+    assert "action_resolved" in event_types
 
 
 def test_game_session_routes_exploration_actions() -> None:
@@ -219,6 +223,7 @@ def test_game_session_routes_exploration_actions() -> None:
     )
     result = session.handle_action(attack_action)
     assert result.errors and "Unsupported exploration action type" in result.errors[0]
+    assert any(event["type"] == "action_rejected" for event in result.events)
 
 
 def test_game_session_routes_encounter_actions() -> None:
@@ -257,6 +262,7 @@ def test_game_session_routes_encounter_actions() -> None:
     )
     result = session.handle_action(attack_action)
     assert result.errors and "is not known by actor" in result.errors[0]
+    assert any(event["type"] == "action_rejected" for event in result.events)
 
     end_turn = create_action(ActionType.END_TURN, actor_instance_id="player_1")
     assert session.handle_action(end_turn).ok is True
@@ -298,6 +304,13 @@ def test_game_session_start_and_end_encounter_helpers_validate_state() -> None:
     assert session.end_encounter().ok is True
     assert session.state is GameState.EXPLORATION
     assert session.points == 10
+
+    end_result = session.start_encounter(_encounter())
+    assert end_result.ok is True
+    end_result = session.end_encounter()
+    assert end_result.ok is True
+    assert any(event["type"] == "reward_granted" for event in end_result.events)
+    assert session.points == 20
 
     result = session.end_encounter()
     assert result.errors and "only end while in encounter" in result.errors[0]
@@ -345,6 +358,7 @@ def test_game_session_start_room_encounter_and_room_clear_sync() -> None:
     assert session.exploration.current_room is not None
     assert session.exploration.current_room.is_cleared is True
     assert session.points == 10
+    assert any(event["type"] == "reward_granted" for event in result.events)
 
     result = session.start_room_encounter()
     assert result.errors and "No uncleared encounters" in result.errors[0]
@@ -366,10 +380,14 @@ def test_game_session_transition_matrix_and_postgame_contract() -> None:
     )
     result = session.handle_action(move_action)
     assert result.errors and "Unsupported postgame action type" in result.errors[0]
+    assert any(event["type"] == "action_rejected" for event in result.events)
 
     finish_action = create_action(ActionType.FINISH, actor_instance_id="system")
     result = session.handle_action(finish_action)
-    assert result.errors and "not implemented yet" in result.errors[0]
+    assert result.ok is True
+    assert any(event["type"] == "game_finished" for event in result.events)
+    assert any(event["type"] == "action_resolved" for event in result.events)
+    assert result.state_changes["postgame"]["outcome"] == "abandoned"
 
 
 def test_game_session_result_wrappers_capture_state_changes() -> None:
@@ -420,7 +438,11 @@ def test_game_session_handles_converse_action() -> None:
         )
     )
     assert result.ok is True
-    assert result.events and result.events[0]["type"] == "converse"
+    event_types = [event["type"] for event in result.events]
+    assert "action_submitted" in event_types
+    assert "action_validated" in event_types
+    assert "converse" in event_types
+    assert "action_resolved" in event_types
 
     result = session.handle_action(
         create_action(
@@ -430,3 +452,26 @@ def test_game_session_handles_converse_action() -> None:
         )
     )
     assert any("cannot be blank" in error for error in result.errors)
+    assert any(event["type"] == "action_rejected" for event in result.events)
+
+
+def test_game_session_action_lifecycle_event_payload_shape() -> None:
+    session = _session()
+    action = create_action(
+        ActionType.CONVERSE,
+        parameters={"message": "hello"},
+        actor_instance_id="player_1",
+    )
+
+    result = session.handle_action(action)
+    assert result.ok is True
+
+    lifecycle_events = [
+        event for event in result.events
+        if event["type"] in {"action_submitted", "action_validated", "action_resolved"}
+    ]
+    assert len(lifecycle_events) == 3
+    for event in lifecycle_events:
+        assert event["action_id"] == action.action_id
+        assert event["action_type"] == action.type.value
+        assert event["actor_instance_id"] == "player_1"

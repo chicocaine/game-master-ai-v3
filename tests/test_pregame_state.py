@@ -79,6 +79,7 @@ def _session() -> SimpleNamespace:
     return SimpleNamespace(
         party=[],
         dungeon=None,
+        available_dungeons=[],
         exploration=SimpleNamespace(current_room=None),
         state=GameState.PREGAME,
     )
@@ -245,13 +246,25 @@ def test_handle_action_routes_pregame_actions() -> None:
     assert session.state is GameState.EXPLORATION
 
 
-def test_handle_action_choose_dungeon_by_id_placeholder_error() -> None:
+def test_handle_action_choose_dungeon_by_id() -> None:
     pregame = PreGameState()
     session = _session()
+    dungeon = _dungeon()
+    session.available_dungeons = [dungeon]
+
     action = create_action(
         ActionType.CHOOSE_DUNGEON,
         parameters={"dungeon_id": "dungeon_1"},
         actor_instance_id="system",
     )
     result = pregame.handle_action(session, action)
-    assert result.errors and "not implemented yet" in result.errors[0]
+    assert result.ok is True
+    assert session.dungeon is dungeon
+
+    bad_action = create_action(
+        ActionType.CHOOSE_DUNGEON,
+        parameters={"dungeon_id": "missing_dungeon"},
+        actor_instance_id="system",
+    )
+    result = pregame.handle_action(session, bad_action)
+    assert result.errors and "was not found" in result.errors[0]
