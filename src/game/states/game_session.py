@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from copy import deepcopy
 from typing import Dict, List, Set
 
 from core.action import Action, validate_action
@@ -13,6 +12,8 @@ from game.actors.player import Player
 from game.actors.enemy import Enemy
 from game.catalog.models import Catalog, DungeonTemplate
 from game.dungeons.dungeon import Dungeon, Encounter, Room
+from game.factories.instance_factory import InstanceFactory, SimpleInstanceIdGenerator
+from game.runtime.models import DungeonInstance
 from game.states.pregame import PreGameState
 from game.states.encounter import EncounterState
 from game.states.exploration import ExplorationState
@@ -31,7 +32,7 @@ ALLOWED_STATE_TRANSITIONS: Dict[GameState, Set[GameState]] = {
 class GameSession:
     state: GameState = GameState.PREGAME
     party: List[Player] = field(default_factory=list)
-    dungeon: Dungeon | None = None
+    dungeon: Dungeon | DungeonInstance | None = None
     catalog: Catalog | None = None
     available_dungeons: List[Dungeon | DungeonTemplate] = field(default_factory=list)
     points: int = 0
@@ -40,57 +41,13 @@ class GameSession:
     encounter: EncounterState = field(default_factory=EncounterState)
     postgame: PostGameState = field(default_factory=PostGameState)
 
-    def instantiate_dungeon_template(self, template: DungeonTemplate) -> Dungeon:
+    def instantiate_dungeon_template(self, template: DungeonTemplate) -> DungeonInstance:
         if self.catalog is None:
             raise ValueError("Cannot instantiate dungeon template without an attached catalog.")
-
-        rooms = []
-        for room_template in template.rooms:
-            encounters = []
-            for encounter_template in room_template.encounters:
-                enemies = []
-                for enemy_template_id in encounter_template.enemy_template_ids:
-                    enemy_template = self.catalog.enemy_templates.get(enemy_template_id)
-                    if enemy_template is None:
-                        raise ValueError(
-                            f"Encounter '{encounter_template.id}' references unknown enemy template '{enemy_template_id}'."
-                        )
-                    enemies.append(deepcopy(enemy_template.enemy))
-
-                encounters.append(
-                    Encounter(
-                        id=encounter_template.id,
-                        name=encounter_template.name,
-                        description=encounter_template.description,
-                        difficulty=encounter_template.difficulty,
-                        cleared=False,
-                        clear_reward=encounter_template.clear_reward,
-                        enemies=enemies,
-                    )
-                )
-
-            rooms.append(
-                Room(
-                id=room_template.id,
-                name=room_template.name,
-                description=room_template.description,
-                is_visited=False,
-                is_cleared=(len(encounters) == 0),
-                is_rested=False,
-                connections=list(room_template.connections),
-                encounters=encounters,
-                allowed_rests=list(room_template.allowed_rests),
-                )
-            )
-
-        return Dungeon(
-            id=template.id,
-            name=template.name,
-            description=template.description,
-            difficulty=template.difficulty,
-            start_room=template.start_room,
-            end_room=template.end_room,
-            rooms=rooms,
+        return InstanceFactory.dungeon_from_template(
+            template,
+            self.catalog,
+            id_gen=SimpleInstanceIdGenerator(),
         )
 
     def alive_players(players: List[Player]) -> List[Player]:

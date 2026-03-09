@@ -7,6 +7,7 @@ from core.enums import ActionType
 from game.actors.player import Player, create_player
 from game.catalog.models import DungeonTemplate
 from game.dungeons.dungeon import Dungeon
+from game.runtime.models import DungeonInstance
 from game.enums import GameState
 from game.entity.blocks.race import Race
 from game.entity.blocks.archetype import Archetype
@@ -36,26 +37,33 @@ class PreGameState:
         return ActionResult.failure(errors=[f"Unsupported pregame action type: '{action.type.value}'."])
 
     @staticmethod
-    def _resolve_dungeon_by_id(session: "GameSession", dungeon_id: str) -> Dungeon | DungeonTemplate | None:
+    def _find_room(dungeon: Any, room_id: str) -> Any | None:
+        for room in getattr(dungeon, "rooms", []):
+            if getattr(room, "id", "") == room_id:
+                return room
+        return None
+
+    @staticmethod
+    def _resolve_dungeon_by_id(session: "GameSession", dungeon_id: str) -> Dungeon | DungeonTemplate | DungeonInstance | None:
         if not dungeon_id:
             return None
 
         dungeon_catalog = getattr(session, "dungeon_catalog", None)
         if isinstance(dungeon_catalog, dict):
             candidate = dungeon_catalog.get(dungeon_id)
-            if isinstance(candidate, (Dungeon, DungeonTemplate)):
+            if isinstance(candidate, (Dungeon, DungeonTemplate, DungeonInstance)):
                 return candidate
 
         available_dungeons = getattr(session, "available_dungeons", None)
         if isinstance(available_dungeons, list):
             for dungeon in available_dungeons:
-                if isinstance(dungeon, (Dungeon, DungeonTemplate)) and dungeon.id == dungeon_id:
+                if isinstance(dungeon, (Dungeon, DungeonTemplate, DungeonInstance)) and dungeon.id == dungeon_id:
                     return dungeon
 
         dungeons = getattr(session, "dungeons", None)
         if isinstance(dungeons, list):
             for dungeon in dungeons:
-                if isinstance(dungeon, (Dungeon, DungeonTemplate)) and dungeon.id == dungeon_id:
+                if isinstance(dungeon, (Dungeon, DungeonTemplate, DungeonInstance)) and dungeon.id == dungeon_id:
                     return dungeon
 
         return None
@@ -66,6 +74,9 @@ class PreGameState:
         candidate: Any,
     ) -> tuple[Dungeon | None, str | None]:
         if isinstance(candidate, Dungeon):
+            return candidate, None
+
+        if isinstance(candidate, DungeonInstance):
             return candidate, None
 
         if isinstance(candidate, DungeonTemplate):
@@ -152,7 +163,7 @@ class PreGameState:
         session.party[player_index] = replacement_player
         return ActionResult.success()
 
-    def handle_choose_dungeon(self, session: "GameSession", dungeon: Dungeon) -> ActionResult:
+    def handle_choose_dungeon(self, session: "GameSession", dungeon: Dungeon | DungeonInstance) -> ActionResult:
         errors: List[str] = []
         if dungeon is None:
             return ActionResult.failure(errors=["Dungeon cannot be None."])
@@ -160,9 +171,9 @@ class PreGameState:
             errors.append("Dungeon must contain at least one room.")
         if not dungeon.start_room:
             errors.append("Dungeon must define a start_room.")
-        if dungeon.start_room and Dungeon.find_room(dungeon, dungeon.start_room) is None:
+        if dungeon.start_room and self._find_room(dungeon, dungeon.start_room) is None:
             errors.append("Dungeon start_room does not exist in dungeon rooms.")
-        if dungeon.end_room and Dungeon.find_room(dungeon, dungeon.end_room) is None:
+        if dungeon.end_room and self._find_room(dungeon, dungeon.end_room) is None:
             errors.append("Dungeon end_room does not exist in dungeon rooms.")
         if errors:
             return ActionResult.failure(errors=errors)
@@ -180,7 +191,7 @@ class PreGameState:
         if errors:
             return ActionResult.failure(errors=errors)
 
-        start_room = Dungeon.find_room(session.dungeon, session.dungeon.start_room)
+        start_room = self._find_room(session.dungeon, session.dungeon.start_room)
         if start_room is None:
             return ActionResult.failure(errors=["Cannot start game because dungeon start_room is invalid."])
 

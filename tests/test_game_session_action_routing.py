@@ -1,6 +1,7 @@
 from core.action import create_action
 from core.enums import ActionType
 from game.actors.enemy import create_enemy
+from game.catalog.models import Catalog, DungeonTemplate, EncounterTemplate, EnemyTemplate, RoomTemplate
 from game.dungeons.dungeon import Dungeon, Encounter, Room
 from game.entity.blocks.archetype import Archetype, WeaponConstraints
 from game.entity.blocks.race import Race
@@ -143,6 +144,47 @@ def _dungeon_with_encounter() -> Dungeon:
 
 def _session() -> GameSession:
     return GameSession()
+
+
+def _catalog_with_template() -> Catalog:
+    enemy = create_enemy(
+        id="enemy_tpl_1",
+        name="Enemy",
+        description="",
+        race=_race(),
+        archetype=_archetype(),
+        weapons=[_weapon()],
+        enemy_instance_id="",
+    )
+    encounter_template = EncounterTemplate(
+        id="enc_tpl_1",
+        name="Encounter",
+        description="",
+        difficulty=DifficultyType.EASY,
+        clear_reward=10,
+        enemy_template_ids=("enemy_tpl_1",),
+    )
+    room_template = RoomTemplate(
+        id="room_tpl_1",
+        name="Start",
+        description="",
+        connections=(),
+        encounters=(encounter_template,),
+        allowed_rests=(RestType.SHORT,),
+    )
+    dungeon_template = DungeonTemplate(
+        id="dungeon_tpl_1",
+        name="Dungeon Template",
+        description="",
+        difficulty=DifficultyType.EASY,
+        start_room="room_tpl_1",
+        end_room="room_tpl_1",
+        rooms=(room_template,),
+    )
+    return Catalog(
+        enemy_templates={"enemy_tpl_1": EnemyTemplate(id="enemy_tpl_1", enemy=enemy)},
+        dungeon_templates={"dungeon_tpl_1": dungeon_template},
+    )
 
 
 def test_game_session_routes_pregame_actions() -> None:
@@ -475,6 +517,46 @@ def test_game_session_action_lifecycle_event_payload_shape() -> None:
         assert event["action_id"] == action.action_id
         assert event["action_type"] == action.type.value
         assert event["actor_instance_id"] == "player_1"
+
+
+def test_game_session_template_dungeon_path_materializes_runtime_instance_and_runs_encounter() -> None:
+    session = _session()
+    session.catalog = _catalog_with_template()
+    session.available_dungeons = [session.catalog.dungeon_templates["dungeon_tpl_1"]]
+
+    setup_actions = [
+        create_action(
+            ActionType.CREATE_PLAYER,
+            parameters={
+                "id": "player_1",
+                "name": "Player",
+                "description": "Recruit",
+                "race": _race(),
+                "archetype": _archetype(),
+                "weapons": [_weapon()],
+            },
+            actor_instance_id="system",
+        ),
+        create_action(
+            ActionType.CHOOSE_DUNGEON,
+            parameters={"dungeon_id": "dungeon_tpl_1"},
+            actor_instance_id="system",
+        ),
+        create_action(ActionType.START, actor_instance_id="system"),
+    ]
+    for action in setup_actions:
+        assert session.handle_action(action).ok is True
+
+    assert session.dungeon is not None
+    assert session.dungeon.id == "dungeon_tpl_1"
+    assert session.exploration.current_room is not None
+    assert session.exploration.current_room.id == "room_tpl_1"
+
+    result = session.start_room_encounter()
+    assert result.ok is True
+    assert session.encounter.current_encounter is not None
+    assert session.encounter.current_encounter.id == "enc_tpl_1"
+    assert session.encounter.current_encounter.enemies[0].enemy_instance_id == "enemy_1"
 
 
 def test_game_session_room_with_multiple_encounters_progresses_until_room_clear() -> None:

@@ -22,22 +22,13 @@ class SimpleInstanceIdGenerator:
 class InstanceFactory:
     @staticmethod
     def enemy_from_template(template: EnemyTemplate, id_gen: SimpleInstanceIdGenerator) -> EnemyInstance:
-        base = template.enemy
+        base = deepcopy(template.enemy)
+        enemy_instance_id = id_gen.next("enemy")
+        base.enemy_instance_id = enemy_instance_id
         return EnemyInstance(
             template_id=template.id,
-            instance_id=id_gen.next("enemy"),
-            name=base.name,
-            description=base.description,
-            hp=base.hp,
-            max_hp=base.max_hp,
-            base_AC=base.base_AC,
-            AC=base.AC,
-            spell_slots=base.spell_slots,
-            max_spell_slots=base.max_spell_slots,
-            initiative_mod=base.initiative_mod,
-            attack_modifier_bonus=base.attack_modifier_bonus,
-            persona=base.persona,
-            active_status_effects=deepcopy(base.active_status_effects),
+            instance_id=enemy_instance_id,
+            enemy=base,
         )
 
     @classmethod
