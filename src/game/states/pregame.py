@@ -34,6 +34,31 @@ class PreGameState:
     def _unsupported_action(action: Action) -> ActionResult:
         return ActionResult.failure(errors=[f"Unsupported pregame action type: '{action.type.value}'."])
 
+    @staticmethod
+    def _resolve_dungeon_by_id(session: "GameSession", dungeon_id: str) -> Dungeon | None:
+        if not dungeon_id:
+            return None
+
+        dungeon_catalog = getattr(session, "dungeon_catalog", None)
+        if isinstance(dungeon_catalog, dict):
+            candidate = dungeon_catalog.get(dungeon_id)
+            if isinstance(candidate, Dungeon):
+                return candidate
+
+        available_dungeons = getattr(session, "available_dungeons", None)
+        if isinstance(available_dungeons, list):
+            for dungeon in available_dungeons:
+                if isinstance(dungeon, Dungeon) and dungeon.id == dungeon_id:
+                    return dungeon
+
+        dungeons = getattr(session, "dungeons", None)
+        if isinstance(dungeons, list):
+            for dungeon in dungeons:
+                if isinstance(dungeon, Dungeon) and dungeon.id == dungeon_id:
+                    return dungeon
+
+        return None
+
     def _next_player_instance_id(self, session: "GameSession") -> str:
         used_ids = {player.player_instance_id for player in session.party if player.player_instance_id}
         index = 1
@@ -191,11 +216,16 @@ class PreGameState:
             )
 
         if action.type is ActionType.CHOOSE_DUNGEON:
-            dungeon = action.parameters.get("dungeon")
-            if not isinstance(dungeon, Dungeon):
-                return ActionResult.failure(
-                    errors=["Choosing dungeon by id is not implemented yet. Provide a Dungeon object in parameter 'dungeon'."]
-                )
+            dungeon_param = action.parameters.get("dungeon")
+            if isinstance(dungeon_param, Dungeon):
+                dungeon = dungeon_param
+            else:
+                dungeon_id = str(dungeon_param)
+                dungeon = self._resolve_dungeon_by_id(session, dungeon_id)
+                if dungeon is None:
+                    return ActionResult.failure(
+                        errors=[f"Dungeon '{dungeon_id}' was not found in available dungeon catalog."]
+                    )
             return self.handle_choose_dungeon(session, dungeon)
 
         return self._unsupported_action(action)
