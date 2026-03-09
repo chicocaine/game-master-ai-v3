@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 from typing import Any, Protocol
 
-from game.runtime.protocols import EncounterLike
+from game.runtime.models import EncounterInstance
 from game.util.dice import roll_for_initiative
 
 
@@ -24,13 +24,13 @@ def _alive_players(session: SessionForInitiative) -> list[Any]:
     return [player for player in getattr(session, "party", []) if getattr(player, "hp", 0) > 0]
 
 
-def _alive_enemies(encounter: EncounterLike) -> list[Any]:
+def _alive_enemies(encounter: EncounterInstance) -> list[Any]:
     return [enemy for enemy in getattr(encounter, "enemies", []) if getattr(enemy, "hp", 0) > 0]
 
 
 def initiate_encounter(
     session: SessionForInitiative,
-    encounter: EncounterLike,
+    encounter: EncounterInstance,
     rng: random.Random | None = None,
 ) -> list[str]:
     rng = rng or getattr(session, "rng", None) or random.Random(5)

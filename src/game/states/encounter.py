@@ -8,14 +8,14 @@ from game.combat.initiative import initiate_encounter
 from game.combat.resolution import calculate_damage_multiplier, resolve_attack_action, resolve_cast_spell_action
 from game.combat.status_effect import merged_damage_affinities_from_effects, tick_and_prune_status_effects
 from game.enums import ControlType, DamageType, GameState, StatusEffectType
-from game.runtime.protocols import EncounterLike
+from game.runtime.models import EncounterInstance
 
 if TYPE_CHECKING:
     from game.states.game_session import GameSession
 
 @dataclass
 class EncounterState:
-    current_encounter: EncounterLike | None = None
+    current_encounter: EncounterInstance | None = None
     turn_order: List[str] = field(default_factory=list)  # actor instance ids
     current_turn_index: int = 0
     post_encounter_summary: Dict[str, Any] = field(default_factory=dict)
@@ -63,7 +63,7 @@ class EncounterState:
 
     # properties of encounter
 
-    def start_encounter(self, session: "GameSession", encounter: EncounterLike) -> ActionResult:
+    def start_encounter(self, session: "GameSession", encounter: EncounterInstance) -> ActionResult:
         if encounter is None:
             return ActionResult.failure(errors=["Encounter cannot be None."])
 
