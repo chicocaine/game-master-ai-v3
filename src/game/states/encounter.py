@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, List
 from core.action import Action, validate_action
 from core.action_result import ActionResult
 from core.enums import ActionType, EventType
+from game.combat.initiative import initiate_encounter
 from game.combat.resolution import calculate_damage_multiplier, resolve_attack_action, resolve_cast_spell_action
 from game.combat.status_effect import merged_damage_affinities_from_effects, tick_and_prune_status_effects
 from game.dungeons.dungeon import Encounter
@@ -70,9 +71,7 @@ class EncounterState:
             enemy.enemy_instance_id = f"enemy_{index}"
 
         self.current_encounter = encounter
-        player_ids = [player.player_instance_id for player in session.party if player.player_instance_id and player.hp > 0]
-        enemy_ids = [enemy.enemy_instance_id for enemy in encounter.enemies if enemy.enemy_instance_id and enemy.hp > 0]
-        self.turn_order = [*player_ids, *enemy_ids]
+        self.turn_order = initiate_encounter(session, encounter)
         self.current_turn_index = 0
         return self._transition(session, GameState.ENCOUNTER)
 
@@ -276,11 +275,16 @@ class EncounterState:
 
         if selected_index is not None:
             self.current_turn_index = selected_index
+            current_actor = self._find_actor(session, self.turn_order[self.current_turn_index])
+            turn_started_event = {
+                "type": EventType.TURN_STARTED.value,
+                "actor_instance_id": self.turn_order[self.current_turn_index],
+            }
+            persona = getattr(current_actor, "persona", "") if current_actor is not None else ""
+            if persona:
+                turn_started_event["persona"] = str(persona)
             events.append(
-                {
-                    "type": EventType.TURN_STARTED.value,
-                    "actor_instance_id": self.turn_order[self.current_turn_index],
-                }
+                turn_started_event
             )
 
         return ActionResult.success(events=events, state_changes=tick_changes)
@@ -289,11 +293,12 @@ class EncounterState:
         if self.current_encounter is None:
             return ActionResult.failure(errors=["No active encounter to end."])
 
+        encounter_id = self.current_encounter.id
         clear_reward = int(getattr(self.current_encounter, "clear_reward", 0))
         session.points = int(getattr(session, "points", 0)) + clear_reward
         self.current_encounter.cleared = True
         self.post_encounter_summary = {
-            "encounter_id": self.current_encounter.id,
+            "encounter_id": encounter_id,
             "status": "cleared",
             "clear_reward": clear_reward,
             "session_points": session.points,
@@ -301,7 +306,27 @@ class EncounterState:
         self.current_encounter = None
         self.turn_order = []
         self.current_turn_index = 0
-        return self._transition(session, GameState.EXPLORATION)
+        transition_result = self._transition(session, GameState.EXPLORATION)
+        if transition_result.errors:
+            return transition_result
+
+        merged_state_changes = dict(transition_result.state_changes)
+        merged_state_changes["encounter"] = dict(self.post_encounter_summary)
+        return ActionResult.success(
+            events=[
+                {
+                    "type": EventType.REWARD_GRANTED.value,
+                    "encounter_id": encounter_id,
+                    "amount": clear_reward,
+                    "session_points": session.points,
+                },
+                {
+                    "type": EventType.ENCOUNTER_ENDED.value,
+                    "encounter_id": encounter_id,
+                },
+            ],
+            state_changes=merged_state_changes,
+        )
 
     def to_dict(self) -> dict:
         return {

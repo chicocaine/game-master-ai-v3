@@ -30,6 +30,7 @@ class GameSession:
     state: GameState = GameState.PREGAME
     party: List[Player] = field(default_factory=list)
     dungeon: Dungeon | None = None
+    available_dungeons: List[Dungeon] = field(default_factory=list)
     points: int = 0
     pregame: PreGameState = field(default_factory=PreGameState)
     exploration: ExplorationState = field(default_factory=ExplorationState)
@@ -65,20 +66,57 @@ class GameSession:
             }
         )
 
+    @staticmethod
+    def _action_event_base(action: Action) -> dict:
+        return {
+            "action_id": action.action_id,
+            "action_type": action.type.value,
+            "actor_instance_id": action.actor_instance_id,
+        }
+
     def handle_action(self, action: Action) -> ActionResult:
+        base_event = self._action_event_base(action)
+        lifecycle_events = [
+            {
+                "type": EventType.ACTION_SUBMITTED.value,
+                **base_event,
+            }
+        ]
+
+        validation_errors = validate_action(action)
+        if validation_errors:
+            lifecycle_events.append(
+                {
+                    "type": EventType.ACTION_REJECTED.value,
+                    "reason": "validation_failed",
+                    "errors": list(validation_errors),
+                    **base_event,
+                }
+            )
+            return ActionResult.failure(errors=validation_errors, events=lifecycle_events)
+
+        lifecycle_events.append(
+            {
+                "type": EventType.ACTION_VALIDATED.value,
+                **base_event,
+            }
+        )
+
         if action.type is ActionType.CONVERSE:
-            validation_errors = validate_action(action)
-            if validation_errors:
-                return ActionResult.failure(errors=validation_errors)
             return ActionResult.success(
                 events=[
+                    *lifecycle_events,
                     {
                         "type": EventType.CONVERSE.value,
                         "actor_instance_id": action.actor_instance_id,
                         "message": str(action.parameters.get("message", "")),
                         "raw_input": action.raw_input,
                         "metadata": dict(action.metadata),
-                    }
+                    },
+                    {
+                        "type": EventType.ACTION_RESOLVED.value,
+                        **base_event,
+                    },
                 ]
             )
 
@@ -95,7 +133,20 @@ class GameSession:
             result = ActionResult.failure(errors=[f"Unsupported game state '{self.state.value}'."])
 
         if result.errors:
-            return result
+            return ActionResult.failure(
+                errors=result.errors,
+                events=[
+                    *lifecycle_events,
+                    *result.events,
+                    {
+                        "type": EventType.ACTION_REJECTED.value,
+                        "reason": "state_handler_failed",
+                        "errors": list(result.errors),
+                        **base_event,
+                    },
+                ],
+                state_changes=result.state_changes,
+            )
 
         if self.state is not before_state and "state" not in result.state_changes:
             merged_changes = dict(result.state_changes)
@@ -103,9 +154,29 @@ class GameSession:
                 "from": before_state.value,
                 "to": self.state.value,
             }
-            return ActionResult.success(events=result.events, state_changes=merged_changes)
+            return ActionResult.success(
+                events=[
+                    *lifecycle_events,
+                    *result.events,
+                    {
+                        "type": EventType.ACTION_RESOLVED.value,
+                        **base_event,
+                    },
+                ],
+                state_changes=merged_changes,
+            )
 
-        return result
+        return ActionResult.success(
+            events=[
+                *lifecycle_events,
+                *result.events,
+                {
+                    "type": EventType.ACTION_RESOLVED.value,
+                    **base_event,
+                },
+            ],
+            state_changes=result.state_changes,
+        )
 
     def start_encounter(self, encounter: Encounter) -> ActionResult:
         before_state = self.state
@@ -116,15 +187,15 @@ class GameSession:
         if result.errors:
             return result
         if self.state is before_state:
-            return ActionResult.success()
-        return ActionResult.success(
-            state_changes={
-                "state": {
-                    "from": before_state.value,
-                    "to": self.state.value,
-                }
+            return ActionResult.success(events=result.events, state_changes=result.state_changes)
+
+        merged_state_changes = dict(result.state_changes)
+        if "state" not in merged_state_changes:
+            merged_state_changes["state"] = {
+                "from": before_state.value,
+                "to": self.state.value,
             }
-        )
+        return ActionResult.success(events=result.events, state_changes=merged_state_changes)
 
     def start_room_encounter(self) -> ActionResult:
         if self.state is not GameState.EXPLORATION:
@@ -152,14 +223,14 @@ class GameSession:
             current_room.is_cleared = all(room_encounter.cleared for room_encounter in current_room.encounters)
 
         if self.state is before_state:
-            return ActionResult.success()
-        return ActionResult.success(
-            state_changes={
-                "state": {
-                    "from": before_state.value,
-                    "to": self.state.value,
-                }
+            return ActionResult.success(events=result.events, state_changes=result.state_changes)
+
+        merged_state_changes = dict(result.state_changes)
+        if "state" not in merged_state_changes:
+            merged_state_changes["state"] = {
+                "from": before_state.value,
+                "to": self.state.value,
             }
-        )
+        return ActionResult.success(events=result.events, state_changes=merged_state_changes)
 
     # serialize and deserialize functions 
