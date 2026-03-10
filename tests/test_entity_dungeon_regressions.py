@@ -1,5 +1,5 @@
 from game.actors.enemy import Enemy
-from game.actors.player import Player, create_player
+from game.actors.player import PlayerInstance, create_player_instance
 from game.combat.attack import Attack
 from game.combat.spell import Spell
 from game.dungeons.dungeon import Encounter
@@ -80,18 +80,40 @@ def _weapon() -> Weapon:
 
 
 def test_entity_merged_spells_uses_spell_sources() -> None:
-    race = _race()
-    archetype = _archetype()
-    weapon = _weapon()
-
-    race.known_spells = [_spell("race_spell")]
-    archetype.known_spells = [_spell("arch_spell")]
-    weapon.known_spells = [_spell("weapon_spell")]
-
-    # Give attacks too so this test would fail if spells accidentally read attacks.
-    race.known_attacks = [_attack("race_attack")]
-    archetype.known_attacks = [_attack("arch_attack")]
-    weapon.known_attacks = [_attack("weapon_attack")]
+    race = Race(
+        id="race_1",
+        name="Race",
+        description="",
+        base_hp=10,
+        base_AC=10,
+        base_spell_slots=2,
+        known_spells=[_spell("race_spell")],
+        known_attacks=[_attack("race_attack")],
+    )
+    archetype = Archetype(
+        id="arch_1",
+        name="Archetype",
+        description="",
+        hp_mod=2,
+        AC_mod=1,
+        spell_slot_mod=1,
+        initiative_mod=0,
+        weapon_constraints=WeaponConstraints(),
+        known_spells=[_spell("arch_spell")],
+        known_attacks=[_attack("arch_attack")],
+    )
+    weapon = Weapon(
+        id="wpn_1",
+        name="Weapon",
+        description="",
+        proficiency=WeaponProficiency.SIMPLE,
+        handling=WeaponHandling.ONE_HANDED,
+        weight_class=WeaponWeightClass.LIGHT,
+        delivery=WeaponDelivery.MELEE,
+        magic_type=WeaponMagicType.MUNDANE,
+        known_spells=[_spell("weapon_spell")],
+        known_attacks=[_attack("weapon_attack")],
+    )
 
     entity = Entity.create(
         id="entity_1",
@@ -107,11 +129,26 @@ def test_entity_merged_spells_uses_spell_sources() -> None:
 
 
 def test_entity_to_dict_uses_weapons_and_merged_cc_immunities() -> None:
-    race = _race()
-    archetype = _archetype()
-
-    race.cc_immunities = [ControlType.SILENCED]
-    archetype.cc_immunities = [ControlType.STUNNED]
+    race = Race(
+        id="race_1",
+        name="Race",
+        description="",
+        base_hp=10,
+        base_AC=10,
+        base_spell_slots=2,
+        cc_immunities=[ControlType.SILENCED],
+    )
+    archetype = Archetype(
+        id="arch_1",
+        name="Archetype",
+        description="",
+        hp_mod=2,
+        AC_mod=1,
+        spell_slot_mod=1,
+        initiative_mod=0,
+        weapon_constraints=WeaponConstraints(),
+        cc_immunities=[ControlType.STUNNED],
+    )
 
     entity = Entity.create(
         id="entity_2",
@@ -131,10 +168,26 @@ def test_entity_to_dict_uses_weapons_and_merged_cc_immunities() -> None:
 
 
 def test_entity_merged_cc_immunities_include_entity_specific_values() -> None:
-    race = _race()
-    archetype = _archetype()
-    race.cc_immunities = [ControlType.SILENCED]
-    archetype.cc_immunities = [ControlType.STUNNED]
+    race = Race(
+        id="race_1",
+        name="Race",
+        description="",
+        base_hp=10,
+        base_AC=10,
+        base_spell_slots=2,
+        cc_immunities=[ControlType.SILENCED],
+    )
+    archetype = Archetype(
+        id="arch_1",
+        name="Archetype",
+        description="",
+        hp_mod=2,
+        AC_mod=1,
+        spell_slot_mod=1,
+        initiative_mod=0,
+        weapon_constraints=WeaponConstraints(),
+        cc_immunities=[ControlType.STUNNED],
+    )
 
     entity = Entity.create(
         id="entity_3",
@@ -152,7 +205,7 @@ def test_entity_merged_cc_immunities_include_entity_specific_values() -> None:
 
 
 def test_player_from_dict_preserves_attack_modifier_bonus() -> None:
-    player = Player.from_dict(
+    player = PlayerInstance.from_dict(
         {
             "id": "player_1",
             "name": "Player",
@@ -185,7 +238,7 @@ def test_enemy_from_dict_preserves_attack_modifier_bonus() -> None:
 
 
 def test_create_player_assigns_default_instance_id_when_missing() -> None:
-    player = create_player(
+    player = create_player_instance(
         id="player_default",
         name="Player Default",
         description="",

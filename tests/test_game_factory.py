@@ -1,5 +1,5 @@
 from game.actors.enemy import create_enemy
-from game.actors.player import create_player
+from game.actors.player import create_player_instance
 from game.catalog.models import Catalog, DungeonTemplate, EncounterTemplate, EnemyTemplate, RoomTemplate
 from game.entity.blocks.archetype import Archetype, WeaponConstraints
 from game.entity.blocks.race import Race
@@ -114,7 +114,7 @@ def test_game_factory_create_session_sets_catalog_and_templates() -> None:
 
 def test_game_factory_create_session_with_selected_dungeon_instantiates_runtime_dungeon() -> None:
     catalog = _catalog()
-    player = create_player(
+    player = create_player_instance(
         id="player_1",
         name="Player",
         description="",
@@ -141,7 +141,7 @@ def test_game_factory_create_session_with_selected_dungeon_instantiates_runtime_
 
 def test_game_factory_create_session_runtime_enemies_do_not_leak_between_encounters() -> None:
     catalog = _catalog()
-    player = create_player(
+    player = create_player_instance(
         id="player_1",
         name="Player",
         description="",
@@ -171,7 +171,7 @@ def test_game_factory_create_session_runtime_enemies_do_not_leak_between_encount
 
 def test_game_factory_assigns_sequential_player_instance_ids_for_unassigned_players() -> None:
     catalog = _catalog()
-    player_a = create_player(
+    player_a = create_player_instance(
         id="player_a",
         name="Player A",
         description="",
@@ -179,7 +179,7 @@ def test_game_factory_assigns_sequential_player_instance_ids_for_unassigned_play
         archetype=_archetype(),
         weapons=[_weapon()],
     )
-    player_b = create_player(
+    player_b = create_player_instance(
         id="player_b",
         name="Player B",
         description="",

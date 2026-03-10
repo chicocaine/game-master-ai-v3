@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Dict, Tuple
 
+from game.actors.player import PlayerInstance
 from game.actors.enemy import Enemy
 from game.enums import DifficultyType, RestType
 
@@ -22,6 +23,22 @@ class EnemyTemplate:
 
     def instantiate_enemy(self) -> Enemy:
         return deepcopy(self.enemy_seed)
+
+
+@dataclass(frozen=True)
+class PlayerTemplate:
+    id: str
+    player_seed: PlayerInstance
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "player_seed", deepcopy(self.player_seed))
+
+    @classmethod
+    def from_player(cls, template_id: str, player: PlayerInstance) -> "PlayerTemplate":
+        return cls(id=template_id, player_seed=player)
+
+    def instantiate_player(self) -> PlayerInstance:
+        return deepcopy(self.player_seed)
 
 
 @dataclass(frozen=True)
@@ -57,5 +74,6 @@ class DungeonTemplate:
 
 @dataclass(frozen=True)
 class Catalog:
+    player_templates: Dict[str, PlayerTemplate] = field(default_factory=dict)
     enemy_templates: Dict[str, EnemyTemplate] = field(default_factory=dict)
     dungeon_templates: Dict[str, DungeonTemplate] = field(default_factory=dict)

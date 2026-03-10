@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterable
 
 from core.data_engine.data_loader import load_game_catalog
-from game.actors.player import Player
+from game.actors.player import PlayerInstance
 from game.catalog.models import Catalog
 from game.enums import GameState
 from game.states.game_session import GameSession
@@ -19,7 +19,7 @@ class GameFactory:
         data_dir: Path | str,
         schema_dir: Path | str | None = None,
         selected_dungeon_id: str | None = None,
-        party: Iterable[Player] | None = None,
+        party: Iterable[PlayerInstance] | None = None,
         seed: int = 5,
         validate_schema: bool = True,
     ) -> GameSession:
@@ -36,8 +36,8 @@ class GameFactory:
         )
 
     @staticmethod
-    def _assign_player_instance_ids(players: Iterable[Player]) -> list[Player]:
-        assigned: list[Player] = []
+    def _assign_player_instance_ids(players: Iterable[PlayerInstance]) -> list[PlayerInstance]:
+        assigned: list[PlayerInstance] = []
         used_ids: set[str] = set()
         for index, player in enumerate(players, start=1):
             cloned = deepcopy(player)
@@ -57,7 +57,7 @@ class GameFactory:
         cls,
         catalog: Catalog,
         selected_dungeon_id: str | None = None,
-        party: Iterable[Player] | None = None,
+        party: Iterable[PlayerInstance] | None = None,
         seed: int = 5,
     ) -> GameSession:
         session = GameSession()

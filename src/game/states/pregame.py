@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, List
 from core.action import Action, validate_action
 from core.action_result import ActionResult
 from core.enums import ActionType
-from game.actors.player import Player, create_player
+from game.actors.player import PlayerInstance, create_player_instance
 from game.catalog.models import DungeonTemplate
 from game.runtime.models import DungeonInstance
 from game.enums import GameState
@@ -99,7 +99,7 @@ class PreGameState:
 
         player_instance_id = self._next_player_instance_id(session)
         try:
-            player: Player = create_player(
+            player: PlayerInstance = create_player_instance(
                 id, name, description, race, archetype, weapons, player_instance_id,
             )
         except ValueError as exc:
@@ -131,7 +131,7 @@ class PreGameState:
             return ActionResult.failure(errors=[f"Player '{player_instance_id}' was not found in party."])
 
         try:
-            replacement_player: Player = create_player(
+            replacement_player: PlayerInstance = create_player_instance(
                 id,
                 name,
                 description,

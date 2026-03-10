@@ -8,7 +8,7 @@ from core.enums import ActionType, EventType
 from game.enums import (
         GameState
 )
-from game.actors.player import Player
+from game.actors.player import PlayerInstance
 from game.actors.enemy import Enemy
 from game.catalog.models import Catalog, DungeonTemplate
 from game.factories.instance_factory import InstanceFactory, SimpleInstanceIdGenerator
@@ -30,7 +30,7 @@ ALLOWED_STATE_TRANSITIONS: Dict[GameState, Set[GameState]] = {
 @dataclass
 class GameSession:
     state: GameState = GameState.PREGAME
-    party: List[Player] = field(default_factory=list)
+    party: List[PlayerInstance] = field(default_factory=list)
     dungeon: DungeonInstance | None = None
     catalog: Catalog | None = None
     available_dungeons: List[DungeonTemplate] = field(default_factory=list)
@@ -49,7 +49,7 @@ class GameSession:
             id_gen=SimpleInstanceIdGenerator(),
         )
 
-    def alive_players(players: List[Player]) -> List[Player]:
+    def alive_players(players: List[PlayerInstance]) -> List[PlayerInstance]:
         return [player for player in players if player.hp > 0]
     
     def alive_enemies(encounter: EncounterInstance) -> List[Enemy]:
@@ -245,4 +245,92 @@ class GameSession:
             }
         return ActionResult.success(events=result.events, state_changes=merged_state_changes)
 
-    # serialize and deserialize functions 
+    @staticmethod
+    def _find_room(dungeon: DungeonInstance | None, room_id: str):
+        if dungeon is None or not room_id:
+            return None
+        for room in dungeon.rooms:
+            if room.id == room_id:
+                return room
+        return None
+
+    @staticmethod
+    def _find_encounter(dungeon: DungeonInstance | None, encounter_id: str):
+        if dungeon is None or not encounter_id:
+            return None
+        for room in dungeon.rooms:
+            for encounter in room.encounters:
+                if encounter.id == encounter_id:
+                    return encounter
+        return None
+
+    def to_dict(self) -> dict:
+        return {
+            "state": self.state.value,
+            "party": [player.to_dict() for player in self.party],
+            "dungeon": self.dungeon.to_dict() if self.dungeon else None,
+            "points": self.points,
+            "available_dungeon_ids": [template.id for template in self.available_dungeons],
+            "pregame": self.pregame.to_dict(),
+            "exploration": self.exploration.to_dict(),
+            "encounter": self.encounter.to_dict(),
+            "postgame": self.postgame.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict, catalog: Catalog | None = None) -> "GameSession":
+        session = cls()
+
+        state_value = str(data.get("state", GameState.PREGAME.value))
+        try:
+            session.state = GameState(state_value)
+        except ValueError:
+            session.state = GameState.PREGAME
+
+        party_payload = data.get("party", [])
+        if isinstance(party_payload, list):
+            session.party = [PlayerInstance.from_dict(item) for item in party_payload]
+
+        dungeon_payload = data.get("dungeon")
+        if isinstance(dungeon_payload, dict):
+            session.dungeon = DungeonInstance.from_dict(dungeon_payload)
+        else:
+            session.dungeon = None
+
+        session.points = int(data.get("points", 0))
+        session.catalog = catalog
+
+        available_ids = data.get("available_dungeon_ids", [])
+        if catalog is not None and isinstance(available_ids, list) and available_ids:
+            session.available_dungeons = [
+                catalog.dungeon_templates[dungeon_id]
+                for dungeon_id in available_ids
+                if dungeon_id in catalog.dungeon_templates
+            ]
+        elif catalog is not None:
+            session.available_dungeons = list(catalog.dungeon_templates.values())
+
+        pregame_data = data.get("pregame", {})
+        session.pregame = PreGameState.from_dict(pregame_data if isinstance(pregame_data, dict) else {})
+
+        exploration_data = data.get("exploration", {})
+        session.exploration = ExplorationState.from_dict(exploration_data if isinstance(exploration_data, dict) else {})
+
+        encounter_data = data.get("encounter", {})
+        session.encounter = EncounterState.from_dict(encounter_data if isinstance(encounter_data, dict) else {})
+
+        postgame_data = data.get("postgame", {})
+        session.postgame = PostGameState.from_dict(postgame_data if isinstance(postgame_data, dict) else {})
+
+        # Restore runtime pointers in state objects after instances are available.
+        room_id = ""
+        if isinstance(exploration_data, dict):
+            room_id = str(exploration_data.get("current_room_id", ""))
+        session.exploration.current_room = cls._find_room(session.dungeon, room_id)
+
+        encounter_id = ""
+        if isinstance(encounter_data, dict):
+            encounter_id = str(encounter_data.get("current_encounter_id", ""))
+        session.encounter.current_encounter = cls._find_encounter(session.dungeon, encounter_id)
+
+        return session

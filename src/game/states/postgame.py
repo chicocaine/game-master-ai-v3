@@ -66,4 +66,22 @@ class PostGameState:
 
         return self._unsupported_action(action)
 
-    # serialize and deserialize functions
+    def to_dict(self) -> dict:
+        return {
+            "outcome": self.outcome.value if self.outcome else "",
+            "summary": dict(self.summary),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "PostGameState":
+        summary = data.get("summary", {})
+        if not isinstance(summary, dict):
+            summary = {}
+        outcome_value = str(data.get("outcome", ""))
+        outcome = None
+        if outcome_value:
+            try:
+                outcome = GameResult(outcome_value)
+            except ValueError:
+                outcome = None
+        return cls(outcome=outcome, summary=summary)

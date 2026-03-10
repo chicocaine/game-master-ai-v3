@@ -5,11 +5,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from core.data_engine.json_schema_validator import JsonSchemaValidator
+from game.actors.player import PlayerInstance
 from game.actors.enemy import Enemy
-from game.catalog.models import Catalog, DungeonTemplate, EncounterTemplate, EnemyTemplate, RoomTemplate
+from game.catalog.models import Catalog, DungeonTemplate, EncounterTemplate, EnemyTemplate, PlayerTemplate, RoomTemplate
 from game.combat.attack import Attack
 from game.combat.spell import Spell
-from game.combat.status_effect import StatusEffect, StatusEffectInstance
+from game.combat.status_effect import StatusEffect
+from game.entity.entity import Entity
 from game.entity.blocks.archetype import Archetype, WeaponConstraints
 from game.entity.blocks.race import Race
 from game.entity.blocks.weapon import Weapon
@@ -135,16 +137,6 @@ class DataLoader:
 				self._require_id(idx["archetypes"], entity.get("archetype_id", ""), "archetypes")
 				for weapon_id in entity.get("weapon_ids", []):
 					self._require_id(idx["weapons"], weapon_id, "weapons")
-				for attack_id in entity.get("known_attack_ids", []):
-					self._require_id(idx["attacks"], attack_id, "attacks")
-				for spell_id in entity.get("known_spell_ids", []):
-					self._require_id(idx["spells"], spell_id, "spells")
-				for active_effect in entity.get("active_status_effects", []):
-					self._require_id(
-						idx["status_effects"],
-						str(active_effect.get("status_effect_id", "")),
-						"status_effects",
-					)
 
 		for dungeon in raw["dungeons"]:
 			room_ids = {str(room.get("id", "")) for room in dungeon.get("rooms", [])}
@@ -287,45 +279,76 @@ class DataLoader:
 				known_attacks=[attacks[item_id] for item_id in row.get("known_attack_ids", [])],
 			)
 
-		def _hydrate_active_status_effects(payload: List[dict]) -> List[StatusEffectInstance]:
-			instances: List[StatusEffectInstance] = []
-			for row in payload:
-				effect_id = str(row.get("status_effect_id", ""))
-				instances.append(
-					StatusEffectInstance(
-						status_effect=status_effects[effect_id],
-						duration=int(row.get("duration", 0)),
-					)
-				)
-			return instances
+		player_templates: Dict[str, PlayerTemplate] = {}
+		for row in raw["players"]:
+			player_id = row["id"]
+			entity = Entity.create(
+				id=player_id,
+				name=str(row.get("name", "")),
+				description=str(row.get("description", "")),
+				race=races[row["race_id"]],
+				archetype=archetypes[row["archetype_id"]],
+				weapons=[weapons[item_id] for item_id in row.get("weapon_ids", [])],
+			)
+			player_seed = PlayerInstance(
+				id=entity.id,
+				name=entity.name,
+				description=entity.description,
+				race=entity.race,
+				archetype=entity.archetype,
+				hp=entity.hp,
+				max_hp=entity.max_hp,
+				base_AC=entity.base_AC,
+				AC=entity.AC,
+				spell_slots=entity.spell_slots,
+				max_spell_slots=entity.max_spell_slots,
+				initiative_mod=entity.initiative_mod,
+				attack_modifier_bonus=entity.attack_modifier_bonus,
+				active_status_effects=entity.active_status_effects,
+				weapons=entity.weapons,
+				known_attacks=entity.known_attacks,
+				known_spells=entity.known_spells,
+				resistances=entity.resistances,
+				immunities=entity.immunities,
+				vulnerabilities=entity.vulnerabilities,
+				cc_immunities=entity.cc_immunities,
+				player_instance_id="",
+			)
+			player_templates[player_id] = PlayerTemplate.from_player(player_id, player_seed)
 
 		enemy_templates: Dict[str, EnemyTemplate] = {}
 		for row in raw["enemies"]:
 			enemy_id = row["id"]
-			enemy = Enemy(
+			entity = Entity.create(
 				id=enemy_id,
 				name=str(row.get("name", "")),
 				description=str(row.get("description", "")),
 				race=races[row["race_id"]],
 				archetype=archetypes[row["archetype_id"]],
-				hp=int(row.get("hp", 0)),
-				max_hp=int(row.get("max_hp", 0)),
-				base_AC=int(row.get("base_AC", 0)),
-				AC=int(row.get("AC", 0)),
-				spell_slots=int(row.get("spell_slots", 0)),
-				max_spell_slots=int(row.get("max_spell_slots", 0)),
-				initiative_mod=int(row.get("initiative_mod", 0)),
-				attack_modifier_bonus=int(row.get("attack_modifier_bonus", 0)),
-				active_status_effects=_hydrate_active_status_effects(
-					row.get("active_status_effects", [])
-				),
 				weapons=[weapons[item_id] for item_id in row.get("weapon_ids", [])],
-				known_attacks=[attacks[item_id] for item_id in row.get("known_attack_ids", [])],
-				known_spells=[spells[item_id] for item_id in row.get("known_spell_ids", [])],
-				resistances=[DamageType(item) for item in row.get("resistances", [])],
-				immunities=[DamageType(item) for item in row.get("immunities", [])],
-				vulnerabilities=[DamageType(item) for item in row.get("vulnerabilities", [])],
-				cc_immunities=[ControlType(item) for item in row.get("cc_immunities", [])],
+			)
+			enemy = Enemy(
+				id=entity.id,
+				name=entity.name,
+				description=entity.description,
+				race=entity.race,
+				archetype=entity.archetype,
+				hp=entity.hp,
+				max_hp=entity.max_hp,
+				base_AC=entity.base_AC,
+				AC=entity.AC,
+				spell_slots=entity.spell_slots,
+				max_spell_slots=entity.max_spell_slots,
+				initiative_mod=entity.initiative_mod,
+				attack_modifier_bonus=entity.attack_modifier_bonus,
+				active_status_effects=entity.active_status_effects,
+				weapons=entity.weapons,
+				known_attacks=entity.known_attacks,
+				known_spells=entity.known_spells,
+				resistances=entity.resistances,
+				immunities=entity.immunities,
+				vulnerabilities=entity.vulnerabilities,
+				cc_immunities=entity.cc_immunities,
 				enemy_instance_id="",
 				persona=str(row.get("persona", "")),
 			)
@@ -370,7 +393,11 @@ class DataLoader:
 				rooms=tuple(room_templates),
 			)
 
-		return Catalog(enemy_templates=enemy_templates, dungeon_templates=dungeon_templates)
+		return Catalog(
+			player_templates=player_templates,
+			enemy_templates=enemy_templates,
+			dungeon_templates=dungeon_templates,
+		)
 
 
 def load_game_catalog(

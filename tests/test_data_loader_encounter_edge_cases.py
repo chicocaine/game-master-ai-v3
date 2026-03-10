@@ -266,3 +266,48 @@ def test_data_loader_legacy_hydrated_path_is_removed(tmp_path: Path) -> None:
 
     catalog = loader.load_catalog()
     assert "dng_ember_ruins" in catalog.dungeon_templates
+
+
+def test_data_loader_catalog_builds_player_templates_from_players_dataset(tmp_path: Path) -> None:
+    data_dir = _copy_data_dir(tmp_path)
+
+    catalog = DataLoader(data_dir=data_dir, schema_dir=data_dir / "schemata").load_catalog()
+
+    assert "player_lyra" in catalog.player_templates
+    player_seed = catalog.player_templates["player_lyra"].player_seed
+    assert player_seed.id == "player_lyra"
+    assert player_seed.player_instance_id == ""
+
+
+def test_data_loader_enemy_templates_ignore_runtime_override_fields_from_json(tmp_path: Path) -> None:
+    data_dir = _copy_data_dir(tmp_path)
+    enemies = json.loads((data_dir / "enemies.json").read_text(encoding="utf-8"))
+    assert isinstance(enemies, list)
+
+    goblin = next(item for item in enemies if item.get("id") == "enemy_goblin_skirmisher")
+    goblin["hp"] = 1
+    goblin["max_hp"] = 1
+    goblin["AC"] = 1
+    goblin["base_AC"] = 1
+    goblin["spell_slots"] = 99
+    goblin["max_spell_slots"] = 99
+    goblin["enemy_instance_id"] = "legacy_enemy_instance"
+    goblin["persona"] = "aggressive_brute"
+
+    (data_dir / "enemies.json").write_text(json.dumps(enemies, indent=4), encoding="utf-8")
+
+    catalog = DataLoader(
+        data_dir=data_dir,
+        schema_dir=data_dir / "schemata",
+        validate_schema=False,
+    ).load_catalog()
+    template = catalog.enemy_templates["enemy_goblin_skirmisher"]
+    seed = template.enemy_seed
+    runtime_enemy = template.instantiate_enemy()
+
+    assert seed.enemy_instance_id == ""
+    assert runtime_enemy.enemy_instance_id == ""
+    assert runtime_enemy.persona == "aggressive_brute"
+    assert runtime_enemy.hp > 1
+    assert runtime_enemy.max_hp > 1
+    assert runtime_enemy.AC > 1

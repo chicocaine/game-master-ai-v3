@@ -8,7 +8,7 @@ def _get_str(data: dict, key: str) -> str:
 
 
 @dataclass
-class Player(Entity):
+class PlayerInstance(Entity):
 	player_instance_id: str = ""
 
 	def to_dict(self) -> dict:
@@ -17,7 +17,7 @@ class Player(Entity):
 		return payload
 
 	@classmethod
-	def from_dict(cls, data: dict) -> "Player":
+	def from_dict(cls, data: dict) -> "PlayerInstance":
 		entity = Entity.from_dict(data)
 		return cls(
 			id=entity.id,
@@ -45,7 +45,7 @@ class Player(Entity):
 		)
 
 
-def create_player(
+def create_player_instance(
 	id: str,
 	name: str,
 	description: str,
@@ -53,7 +53,7 @@ def create_player(
 	archetype,
 	weapons,
 	player_instance_id: str = "",
-) -> Player:
+) -> PlayerInstance:
 	assigned_instance_id = player_instance_id or "player_1"
 	entity = Entity.create(
 		id=id,
@@ -63,7 +63,7 @@ def create_player(
 		archetype=archetype,
 		weapons=weapons,
 	)
-	return Player(
+	return PlayerInstance(
 		id=entity.id,
 		name=entity.name,
 		description=entity.description,
