@@ -9,6 +9,7 @@ from core.enums import ActionType
 from game.engine.interfaces import ActionProvider, EngineContext
 from game.llm.client import RetryPolicy, invoke_with_retry
 from game.llm.config import LlmSettings
+from game.llm.converse import ConverseResponder
 from game.llm.contracts import LlmMessage, LlmRequest
 from game.llm.errors import LlmError
 from game.llm.json_parse import parse_json_object, validate_action_payload
@@ -28,6 +29,7 @@ class PlayerIntentLlmProvider(ActionProvider):
     client: Any
     settings: LlmSettings
     retry_policy: RetryPolicy = field(default_factory=lambda: RetryPolicy(max_attempts=2, backoff_seconds=0.0))
+    converse_responder: ConverseResponder | None = None
     include_provider_metadata: bool = True
     queue: Deque[PlayerInputMessage] = field(default_factory=deque)
 
@@ -117,6 +119,28 @@ class PlayerIntentLlmProvider(ActionProvider):
 
         return Action.from_dict(action_data)
 
+    def _route_converse_action(self, action: Action, session: Any, user_message: PlayerInputMessage) -> Action:
+        if action.type is not ActionType.CONVERSE:
+            return action
+        if self.converse_responder is None:
+            return action
+
+        response = self.converse_responder.generate(
+            player_message=str(action.parameters.get("message", user_message.text)),
+            state_summary=build_state_summary(session),
+        )
+        if response is None:
+            return action
+
+        metadata = dict(action.metadata)
+        metadata["converse_response"] = {
+            "reply": str(response.get("reply", "")),
+            "tone": str(response.get("tone", "")),
+            "metadata": dict(response.get("metadata", {})),
+        }
+        action.metadata = metadata
+        return action
+
     def next_action(self, session: Any, ctx: EngineContext) -> Optional[Action]:
         if not self.queue:
             return None
@@ -141,4 +165,4 @@ class PlayerIntentLlmProvider(ActionProvider):
         if action.type.value not in allowed_actions:
             return self._fallback_action(user_message, reason="disallowed_action_type")
 
-        return action
+        return self._route_converse_action(action=action, session=session, user_message=user_message)
