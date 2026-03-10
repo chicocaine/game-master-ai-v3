@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass, field
+import time
 from typing import Any, Dict, Optional
 
 from core.action import Action, create_action
@@ -15,6 +16,10 @@ from game.llm.errors import LlmError
 from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object, validate_action_payload
 from game.llm.prompts import enemy_ai
+from game.llm.telemetry import LlmTelemetry
+
+
+ENEMY_AI_PROMPT_VERSION = "enemy_ai.v1"
 
 
 @dataclass
@@ -22,6 +27,7 @@ class EnemyLlmActionProvider(ActionProvider):
     client: Any
     settings: LlmSettings
     retry_policy: RetryPolicy = field(default_factory=lambda: RetryPolicy(max_attempts=2, backoff_seconds=0.0))
+    telemetry: LlmTelemetry | None = None
     include_provider_metadata: bool = True
 
     def _current_turn_enemy_id(self, session: Any) -> str:
@@ -95,6 +101,8 @@ class EnemyLlmActionProvider(ActionProvider):
         }
 
     def _fallback_action(self, enemy_id: str, reason: str) -> Action:
+        if self.telemetry is not None:
+            self.telemetry.emit_fallback("enemy_ai", ENEMY_AI_PROMPT_VERSION, reason)
         metadata = {
             "provider": "enemy_llm",
             "fallback": True,
@@ -140,6 +148,7 @@ class EnemyLlmActionProvider(ActionProvider):
                 "provider": "enemy_llm",
                 "state": GameState.ENCOUNTER.value,
                 "actor_instance_id": enemy_id,
+                "prompt_version": ENEMY_AI_PROMPT_VERSION,
             },
         )
 
@@ -186,21 +195,68 @@ class EnemyLlmActionProvider(ActionProvider):
         enemy_persona = str(getattr(enemy, "persona", "") or "")
         combat_summary = self._summarize_combat(session, current_enemy_id=enemy_id)
         request = self._build_request(enemy_id=enemy_id, enemy_persona=enemy_persona, combat_summary=combat_summary)
+        started = time.perf_counter()
+        response_text = ""
 
         try:
             response = invoke_with_retry(client=self.client, request=request, retry_policy=self.retry_policy)
+            response_text = response.text
             payload = parse_json_object(response.text)
             action = self._action_from_payload(payload, enemy_id=enemy_id)
         except LlmError as exc:
+            if self.telemetry is not None:
+                self.telemetry.emit_call(
+                    domain="enemy_ai",
+                    request=request,
+                    success=False,
+                    latency_ms=(time.perf_counter() - started) * 1000.0,
+                    error_type=exc.__class__.__name__,
+                )
+                self.telemetry.emit_validation(
+                    domain="enemy_ai",
+                    prompt_version=ENEMY_AI_PROMPT_VERSION,
+                    valid=False,
+                    error_type=exc.__class__.__name__,
+                )
             return self._fallback_action(enemy_id, reason=f"llm_error:{exc.__class__.__name__}")
         except Exception as exc:  # pragma: no cover
+            if self.telemetry is not None:
+                self.telemetry.emit_call(
+                    domain="enemy_ai",
+                    request=request,
+                    success=False,
+                    latency_ms=(time.perf_counter() - started) * 1000.0,
+                    error_type=exc.__class__.__name__,
+                )
+                self.telemetry.emit_validation(
+                    domain="enemy_ai",
+                    prompt_version=ENEMY_AI_PROMPT_VERSION,
+                    valid=False,
+                    error_type=exc.__class__.__name__,
+                )
             return self._fallback_action(enemy_id, reason=f"unexpected_error:{exc.__class__.__name__}")
 
         if action.actor_instance_id != enemy_id:
+            if self.telemetry is not None:
+                self.telemetry.emit_validation("enemy_ai", ENEMY_AI_PROMPT_VERSION, valid=False, error_type="invalid_actor")
             return self._fallback_action(enemy_id, reason="invalid_actor")
         if not self._is_allowed_enemy_action(action):
+            if self.telemetry is not None:
+                self.telemetry.emit_validation("enemy_ai", ENEMY_AI_PROMPT_VERSION, valid=False, error_type="disallowed_action_type")
             return self._fallback_action(enemy_id, reason="disallowed_action_type")
         if not self._validate_combat_targets(action):
+            if self.telemetry is not None:
+                self.telemetry.emit_validation("enemy_ai", ENEMY_AI_PROMPT_VERSION, valid=False, error_type="invalid_target_payload")
             return self._fallback_action(enemy_id, reason="invalid_target_payload")
+
+        if self.telemetry is not None:
+            self.telemetry.emit_call(
+                domain="enemy_ai",
+                request=request,
+                success=True,
+                latency_ms=(time.perf_counter() - started) * 1000.0,
+                response_text=response_text,
+            )
+            self.telemetry.emit_validation("enemy_ai", ENEMY_AI_PROMPT_VERSION, valid=True)
 
         return action

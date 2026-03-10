@@ -1,6 +1,7 @@
 from collections import deque
 from dataclasses import dataclass, field
 import json
+import time
 from typing import Any, Deque, Dict, Optional
 
 from core.action import Action
@@ -17,6 +18,10 @@ from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object, validate_action_payload
 from game.llm.prompts.base import allowed_action_values_for_state
 from game.llm.routing import build_state_summary, prompt_module_for_state
+from game.llm.telemetry import LlmTelemetry
+
+
+PLAYER_INTENT_PROMPT_VERSION = "player_intent.v1"
 
 
 @dataclass(frozen=True)
@@ -32,6 +37,7 @@ class PlayerIntentLlmProvider(ActionProvider):
     settings: LlmSettings
     retry_policy: RetryPolicy = field(default_factory=lambda: RetryPolicy(max_attempts=2, backoff_seconds=0.0))
     converse_responder: ConverseResponder | None = None
+    telemetry: LlmTelemetry | None = None
     include_provider_metadata: bool = True
     queue: Deque[PlayerInputMessage] = field(default_factory=deque)
 
@@ -84,6 +90,7 @@ class PlayerIntentLlmProvider(ActionProvider):
             metadata={
                 "provider": "player_intent_llm",
                 "state": session.state.value,
+                "prompt_version": PLAYER_INTENT_PROMPT_VERSION,
             },
         )
 
@@ -94,6 +101,8 @@ class PlayerIntentLlmProvider(ActionProvider):
         stripped = user_message.text.strip()
         if not stripped:
             return None
+        if self.telemetry is not None:
+            self.telemetry.emit_fallback("player_intent", PLAYER_INTENT_PROMPT_VERSION, reason)
         metadata: Dict[str, Any] = {
             "provider": "player_intent_llm",
             "fallback": True,
@@ -158,6 +167,8 @@ class PlayerIntentLlmProvider(ActionProvider):
 
         user_message = self.queue.popleft()
         request = self._build_request(session, user_message)
+        started = time.perf_counter()
+        response_text = ""
 
         try:
             response = invoke_with_retry(
@@ -165,15 +176,65 @@ class PlayerIntentLlmProvider(ActionProvider):
                 request=request,
                 retry_policy=self.retry_policy,
             )
+            response_text = response.text
             payload = parse_json_object(response.text)
             action = self._action_from_payload(payload, user_message)
         except LlmError as exc:
+            if self.telemetry is not None:
+                self.telemetry.emit_call(
+                    domain="player_intent",
+                    request=request,
+                    success=False,
+                    latency_ms=(time.perf_counter() - started) * 1000.0,
+                    error_type=exc.__class__.__name__,
+                )
+                self.telemetry.emit_validation(
+                    domain="player_intent",
+                    prompt_version=PLAYER_INTENT_PROMPT_VERSION,
+                    valid=False,
+                    error_type=exc.__class__.__name__,
+                )
             return self._fallback_action(user_message, reason=f"llm_error:{exc.__class__.__name__}")
         except Exception as exc:  # pragma: no cover - defensive safety
+            if self.telemetry is not None:
+                self.telemetry.emit_call(
+                    domain="player_intent",
+                    request=request,
+                    success=False,
+                    latency_ms=(time.perf_counter() - started) * 1000.0,
+                    error_type=exc.__class__.__name__,
+                )
+                self.telemetry.emit_validation(
+                    domain="player_intent",
+                    prompt_version=PLAYER_INTENT_PROMPT_VERSION,
+                    valid=False,
+                    error_type=exc.__class__.__name__,
+                )
             return self._fallback_action(user_message, reason=f"unexpected_error:{exc.__class__.__name__}")
 
         allowed_actions = set(self._allowed_action_values(session))
         if action.type.value not in allowed_actions:
+            if self.telemetry is not None:
+                self.telemetry.emit_validation(
+                    domain="player_intent",
+                    prompt_version=PLAYER_INTENT_PROMPT_VERSION,
+                    valid=False,
+                    error_type="disallowed_action_type",
+                )
             return self._fallback_action(user_message, reason="disallowed_action_type")
+
+        if self.telemetry is not None:
+            self.telemetry.emit_call(
+                domain="player_intent",
+                request=request,
+                success=True,
+                latency_ms=(time.perf_counter() - started) * 1000.0,
+                response_text=response_text,
+            )
+            self.telemetry.emit_validation(
+                domain="player_intent",
+                prompt_version=PLAYER_INTENT_PROMPT_VERSION,
+                valid=True,
+            )
 
         return self._route_converse_action(action=action, session=session, user_message=user_message)

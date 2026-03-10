@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass, field
+import time
 from typing import Any, Dict, Optional
 
 from game.llm.client import RetryPolicy, invoke_with_retry
@@ -10,6 +11,10 @@ from game.llm.errors import LlmError, LlmSchemaValidationError
 from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object
 from game.llm.prompts import converse as converse_prompt
+from game.llm.telemetry import LlmTelemetry
+
+
+CONVERSE_PROMPT_VERSION = "converse.v1"
 
 
 @dataclass
@@ -17,6 +22,7 @@ class ConverseResponder:
     client: Any
     settings: LlmSettings
     retry_policy: RetryPolicy = field(default_factory=lambda: RetryPolicy(max_attempts=2, backoff_seconds=0.0))
+    telemetry: LlmTelemetry | None = None
 
     def _build_request(self, player_message: str, state_summary: Dict[str, Any]) -> LlmRequest:
         payload = converse_prompt.build_user_payload(player_message=player_message, state_summary=state_summary)
@@ -42,7 +48,7 @@ class ConverseResponder:
             max_tokens=self.settings.conversation.max_tokens,
             timeout_seconds=self.settings.timeout_seconds,
             response_format={"type": "json_schema", "json_schema": converse_prompt.build_response_schema()},
-            metadata={"provider": "converse_llm"},
+            metadata={"provider": "converse_llm", "prompt_version": CONVERSE_PROMPT_VERSION},
         )
 
     @staticmethod
@@ -71,13 +77,43 @@ class ConverseResponder:
 
     def generate(self, player_message: str, state_summary: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         request = self._build_request(player_message=player_message, state_summary=state_summary)
+        started = time.perf_counter()
+        response_text = ""
 
         try:
             response = invoke_with_retry(client=self.client, request=request, retry_policy=self.retry_policy)
+            response_text = response.text
             payload = parse_json_object(response.text)
             validated = self._validate_payload(payload)
+            if self.telemetry is not None:
+                self.telemetry.emit_call(
+                    domain="converse",
+                    request=request,
+                    success=True,
+                    latency_ms=(time.perf_counter() - started) * 1000.0,
+                    response_text=response_text,
+                )
+                self.telemetry.emit_validation("converse", CONVERSE_PROMPT_VERSION, valid=True)
             return validated
-        except LlmError:
+        except LlmError as exc:
+            if self.telemetry is not None:
+                self.telemetry.emit_call(
+                    domain="converse",
+                    request=request,
+                    success=False,
+                    latency_ms=(time.perf_counter() - started) * 1000.0,
+                    error_type=exc.__class__.__name__,
+                )
+                self.telemetry.emit_validation("converse", CONVERSE_PROMPT_VERSION, valid=False, error_type=exc.__class__.__name__)
             return None
-        except Exception:
+        except Exception as exc:
+            if self.telemetry is not None:
+                self.telemetry.emit_call(
+                    domain="converse",
+                    request=request,
+                    success=False,
+                    latency_ms=(time.perf_counter() - started) * 1000.0,
+                    error_type=exc.__class__.__name__,
+                )
+                self.telemetry.emit_validation("converse", CONVERSE_PROMPT_VERSION, valid=False, error_type=exc.__class__.__name__)
             return None

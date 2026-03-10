@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass, field
+import time
 from typing import Any, Dict, List, Optional
 
 from core.enums import EventType
@@ -13,6 +14,10 @@ from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object, validate_narration_payload
 from game.llm.prompts import narration as narration_prompt
 from game.llm.routing import build_state_summary
+from game.llm.telemetry import LlmTelemetry
+
+
+NARRATION_PROMPT_VERSION = "narration.v1"
 
 
 DEFAULT_NARRATION_TRIGGER_TYPES = {
@@ -33,6 +38,7 @@ class LlmNarrator:
     settings: LlmSettings
     retry_policy: RetryPolicy = field(default_factory=lambda: RetryPolicy(max_attempts=2, backoff_seconds=0.0))
     converse_responder: ConverseResponder | None = None
+    telemetry: LlmTelemetry | None = None
     trigger_types: set[str] = field(default_factory=lambda: set(DEFAULT_NARRATION_TRIGGER_TYPES))
 
     @staticmethod
@@ -84,7 +90,7 @@ class LlmNarrator:
             max_tokens=self.settings.narration.max_tokens,
             timeout_seconds=self.settings.timeout_seconds,
             response_format={"type": "json_schema", "json_schema": narration_prompt.build_response_schema()},
-            metadata={"provider": "narration_llm"},
+            metadata={"provider": "narration_llm", "prompt_version": NARRATION_PROMPT_VERSION},
         )
 
     def _generate_converse(self, events: List[Dict[str, Any]], session: Any) -> Optional[str]:
@@ -115,12 +121,42 @@ class LlmNarrator:
                 return converse_reply
 
         request = self._narration_request(events=events, session=session)
+        started = time.perf_counter()
+        response_text = ""
         try:
             response = invoke_with_retry(client=self.client, request=request, retry_policy=self.retry_policy)
+            response_text = response.text
             payload = parse_json_object(response.text)
             validated = validate_narration_payload(payload)
+            if self.telemetry is not None:
+                self.telemetry.emit_call(
+                    domain="narration",
+                    request=request,
+                    success=True,
+                    latency_ms=(time.perf_counter() - started) * 1000.0,
+                    response_text=response_text,
+                )
+                self.telemetry.emit_validation("narration", NARRATION_PROMPT_VERSION, valid=True)
             return validated["text"]
-        except LlmError:
+        except LlmError as exc:
+            if self.telemetry is not None:
+                self.telemetry.emit_call(
+                    domain="narration",
+                    request=request,
+                    success=False,
+                    latency_ms=(time.perf_counter() - started) * 1000.0,
+                    error_type=exc.__class__.__name__,
+                )
+                self.telemetry.emit_validation("narration", NARRATION_PROMPT_VERSION, valid=False, error_type=exc.__class__.__name__)
             return None
-        except Exception:
+        except Exception as exc:
+            if self.telemetry is not None:
+                self.telemetry.emit_call(
+                    domain="narration",
+                    request=request,
+                    success=False,
+                    latency_ms=(time.perf_counter() - started) * 1000.0,
+                    error_type=exc.__class__.__name__,
+                )
+                self.telemetry.emit_validation("narration", NARRATION_PROMPT_VERSION, valid=False, error_type=exc.__class__.__name__)
             return None

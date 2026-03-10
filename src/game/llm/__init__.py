@@ -15,6 +15,13 @@ from game.llm.errors import (
 from game.llm.fewshot import available_domains, get_few_shot_examples, get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object, validate_action_payload, validate_narration_payload
 from game.llm.narrator.llm_narrator import LlmNarrator
+from game.llm.telemetry import (
+    InMemoryLlmTelemetrySink,
+    JsonlLlmTelemetrySink,
+    LlmMetricsTracker,
+    LlmTelemetry,
+    sanitize_payload,
+)
 
 __all__ = [
     "LlmClient",
@@ -29,19 +36,24 @@ __all__ = [
     "LlmDomainSettings",
     "LlmError",
     "LlmMessage",
+    "LlmMetricsTracker",
     "LlmRequest",
     "LlmResponse",
     "LlmResponseParseError",
     "LlmRetryExhaustedError",
     "LlmSchemaValidationError",
     "LlmSettings",
+    "LlmTelemetry",
     "LlmNarrator",
     "LlmTimeoutError",
     "LlmTransportError",
+    "InMemoryLlmTelemetrySink",
+    "JsonlLlmTelemetrySink",
     "RetryPolicy",
     "invoke_with_retry",
     "load_llm_settings",
     "parse_json_object",
+    "sanitize_payload",
     "validate_action_payload",
     "validate_narration_payload",
 ]
