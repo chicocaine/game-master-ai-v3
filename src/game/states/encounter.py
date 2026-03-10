@@ -297,6 +297,25 @@ class EncounterState:
         clear_reward = int(getattr(self.current_encounter, "clear_reward", 0))
         session.points = int(getattr(session, "points", 0)) + clear_reward
         self.current_encounter.cleared = True
+
+        status_cleared_events: List[dict] = []
+        for player in getattr(session, "party", []):
+            active_status_effects = getattr(player, "active_status_effects", None)
+            if not isinstance(active_status_effects, list):
+                continue
+            removed_count = len(active_status_effects)
+            if removed_count <= 0:
+                continue
+            active_status_effects.clear()
+            status_cleared_events.append(
+                {
+                    "type": EventType.STATUS_EFFECT_REMOVED.value,
+                    "target_instance_id": self._instance_id(player),
+                    "count": removed_count,
+                    "source": "encounter_end",
+                }
+            )
+
         self.post_encounter_summary = {
             "encounter_id": encounter_id,
             "status": "cleared",
@@ -320,6 +339,7 @@ class EncounterState:
                     "amount": clear_reward,
                     "session_points": session.points,
                 },
+                *status_cleared_events,
                 {
                     "type": EventType.ENCOUNTER_ENDED.value,
                     "encounter_id": encounter_id,

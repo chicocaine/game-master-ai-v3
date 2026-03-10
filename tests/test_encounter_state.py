@@ -324,6 +324,14 @@ def test_end_encounter_transitions_back_to_exploration() -> None:
     result = state.start_encounter(session, encounter)
     assert result.ok is True
 
+    session.party[0].active_status_effects.extend(
+        [
+            _control_effect(ControlType.RESTRAINED, "restrained_end_1"),
+            _control_effect(ControlType.SILENCED, "silenced_end_1"),
+        ]
+    )
+    assert len(session.party[0].active_status_effects) == 2
+
     result = state.end_encounter(session)
     assert result.ok is True
     assert session.state is GameState.EXPLORATION
@@ -335,6 +343,14 @@ def test_end_encounter_transitions_back_to_exploration() -> None:
     assert state.post_encounter_summary["session_points"] == 10
     assert state.post_encounter_summary["status"] == "cleared"
     assert encounter.cleared is True
+    assert session.party[0].active_status_effects == []
+    assert any(
+        event["type"] == "status_effect_removed"
+        and event.get("target_instance_id") == "player_1"
+        and event.get("count") == 2
+        and event.get("source") == "encounter_end"
+        for event in result.events
+    )
 
 
 def test_result_first_lifecycle_methods() -> None:
