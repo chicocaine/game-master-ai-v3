@@ -1,3 +1,11 @@
+from game.llm.bootstrap import (
+    LlmClients,
+    LlmRuntimeBundle,
+    build_provider_chain,
+    bundle_narrator,
+    create_llm_runtime_bundle,
+    create_shared_telemetry,
+)
 from game.llm.client import LlmClient, RetryPolicy, invoke_with_retry
 from game.llm.config import LlmDomainSettings, LlmSettings, load_llm_settings
 from game.llm.converse import ConverseResponder
@@ -27,6 +35,12 @@ __all__ = [
     "LlmClient",
     "LlmConfigurationError",
     "ConverseResponder",
+    "LlmClients",
+    "LlmRuntimeBundle",
+    "build_provider_chain",
+    "bundle_narrator",
+    "create_llm_runtime_bundle",
+    "create_shared_telemetry",
     "available_domains",
     "build_recent_window",
     "estimate_tokens",
