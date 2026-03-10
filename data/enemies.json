@@ -1,57 +1,20 @@
 [
 	{
 		"id": "enemy_goblin_skirmisher",
-		"enemy_instance_id": "einst_goblin_001",
 		"name": "Goblin Skirmisher",
 		"description": "A nimble raider that peppers foes from range.",
 		"persona": "aggressive",
 		"race_id": "race_human",
 		"archetype_id": "arch_ranger",
-		"weapon_ids": ["wpn_hunter_bow"],
-		"hp": 11,
-		"max_hp": 11,
-		"base_AC": 11,
-		"AC": 12,
-		"spell_slots": 1,
-		"max_spell_slots": 1,
-		"initiative_mod": 2,
-		"attack_modifier_bonus": 2,
-		"active_status_effects": [],
-		"known_attack_ids": ["atk_power_shot"],
-		"known_spell_ids": [],
-		"resistances": ["cold"],
-		"immunities": [],
-		"vulnerabilities": [],
-		"cc_immunities": []
+		"weapon_ids": ["wpn_hunter_bow"]
 	},
 	{
 		"id": "enemy_ash_wraith",
-		"enemy_instance_id": "einst_wraith_001",
 		"name": "Ash Wraith",
 		"description": "A drifting ember spirit bound to old ruins.",
 		"persona": "calculating",
 		"race_id": "race_elf",
 		"archetype_id": "arch_mage",
-		"weapon_ids": ["wpn_sage_staff"],
-		"hp": 14,
-		"max_hp": 14,
-		"base_AC": 11,
-		"AC": 12,
-		"spell_slots": 4,
-		"max_spell_slots": 4,
-		"initiative_mod": 1,
-		"attack_modifier_bonus": 1,
-		"active_status_effects": [
-			{
-				"status_effect_id": "se_burning",
-				"duration": 1
-			}
-		],
-		"known_attack_ids": [],
-		"known_spell_ids": ["spl_firebolt", "spl_ice_lance"],
-		"resistances": ["psychic", "fire"],
-		"immunities": [],
-		"vulnerabilities": ["piercing"],
-		"cc_immunities": ["asleep", "silenced"]
+		"weapon_ids": ["wpn_sage_staff"]
 	}
 ]

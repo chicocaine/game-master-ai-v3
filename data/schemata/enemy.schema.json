@@ -8,35 +8,18 @@
 		"additionalProperties": false,
 		"required": [
 			"id",
-			"enemy_instance_id",
 			"name",
 			"description",
 			"persona",
 			"race_id",
 			"archetype_id",
-			"weapon_ids",
-			"hp",
-			"max_hp",
-			"base_AC",
-			"AC",
-			"spell_slots",
-			"max_spell_slots",
-			"initiative_mod",
-			"attack_modifier_bonus",
-			"active_status_effects",
-			"known_attack_ids",
-			"known_spell_ids",
-			"resistances",
-			"immunities",
-			"vulnerabilities",
-			"cc_immunities"
+			"weapon_ids"
 		],
 		"properties": {
 			"id": {
 				"type": "string",
 				"pattern": "^[a-z][a-z0-9_]*$"
 			},
-			"enemy_instance_id": { "type": "string", "minLength": 1 },
 			"name": { "type": "string", "minLength": 1 },
 			"description": { "type": "string" },
 			"persona": { "type": "string" },
@@ -58,84 +41,7 @@
 					"pattern": "^[a-z][a-z0-9_]*$"
 				},
 				"uniqueItems": true
-			},
-			"hp": { "type": "integer", "minimum": 0 },
-			"max_hp": { "type": "integer", "minimum": 0 },
-			"base_AC": { "type": "integer", "minimum": 0 },
-			"AC": { "type": "integer", "minimum": 0 },
-			"spell_slots": { "type": "integer", "minimum": 0 },
-			"max_spell_slots": { "type": "integer", "minimum": 0 },
-			"initiative_mod": { "type": "integer" },
-			"attack_modifier_bonus": { "type": "integer" },
-			"active_status_effects": {
-				"type": "array",
-				"items": {
-					"type": "object",
-					"additionalProperties": false,
-					"required": ["status_effect_id", "duration"],
-					"properties": {
-						"status_effect_id": {
-							"description": "Cross-reference to status_effects.json -> status_effect.id",
-							"type": "string",
-							"pattern": "^[a-z][a-z0-9_]*$"
-						},
-						"duration": { "type": "integer", "minimum": 0 }
-					}
-				}
-			},
-			"known_attack_ids": {
-				"description": "Cross-reference to attacks.json -> attack.id",
-				"type": "array",
-				"items": {
-					"type": "string",
-					"pattern": "^[a-z][a-z0-9_]*$"
-				},
-				"uniqueItems": true
-			},
-			"known_spell_ids": {
-				"description": "Cross-reference to spells.json -> spell.id",
-				"type": "array",
-				"items": {
-					"type": "string",
-					"pattern": "^[a-z][a-z0-9_]*$"
-				},
-				"uniqueItems": true
-			},
-			"resistances": { "$ref": "#/$defs/damageTypeArray" },
-			"immunities": { "$ref": "#/$defs/damageTypeArray" },
-			"vulnerabilities": { "$ref": "#/$defs/damageTypeArray" },
-			"cc_immunities": {
-				"type": "array",
-				"items": {
-					"type": "string",
-					"enum": ["stunned", "asleep", "restrained", "silenced"]
-				},
-				"uniqueItems": true
 			}
-		}
-	},
-	"$defs": {
-		"damageTypeArray": {
-			"type": "array",
-			"items": {
-				"type": "string",
-				"enum": [
-					"acid",
-					"bludgeoning",
-					"cold",
-					"fire",
-					"force",
-					"lightning",
-					"necrotic",
-					"piercing",
-					"poison",
-					"psychic",
-					"radiant",
-					"slashing",
-					"thunder"
-				]
-			},
-			"uniqueItems": true
 		}
 	}
 }
