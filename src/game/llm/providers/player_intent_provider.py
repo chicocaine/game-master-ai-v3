@@ -8,9 +8,11 @@ from core.action import Action
 from core.action import create_action
 from core.enums import ActionType
 from game.engine.interfaces import ActionProvider, EngineContext
+from game.enums import GameState
 from game.llm.client import RetryPolicy, invoke_with_retry
 from game.llm.config import LlmSettings
 from game.llm.converse import ConverseResponder
+from game.llm.context_builder import build_context_envelope
 from game.llm.context_window import fit_dict_to_token_budget
 from game.llm.contracts import LlmMessage, LlmRequest
 from game.llm.errors import LlmError
@@ -40,8 +42,19 @@ class PlayerIntentLlmProvider(ActionProvider):
     telemetry: LlmTelemetry | None = None
     include_provider_metadata: bool = True
     queue: Deque[PlayerInputMessage] = field(default_factory=deque)
+    timeline: Deque[Dict[str, Any]] = field(default_factory=lambda: deque(maxlen=40))
+
+    def _append_timeline(self, entry: Dict[str, Any]) -> None:
+        self.timeline.append(dict(entry))
 
     def enqueue(self, text: str, actor_instance_id: str = "", metadata: Dict[str, Any] | None = None) -> None:
+        self._append_timeline(
+            {
+                "kind": "player_input",
+                "actor_instance_id": str(actor_instance_id),
+                "player_input": str(text),
+            }
+        )
         self.queue.append(
             PlayerInputMessage(
                 text=str(text),
@@ -56,16 +69,29 @@ class PlayerIntentLlmProvider(ActionProvider):
     def _build_request(self, session: Any, user_message: PlayerInputMessage) -> LlmRequest:
         prompt_module = prompt_module_for_state(session.state)
         state_summary = build_state_summary(session)
+        allowed_actions = self._allowed_action_values(session)
+        context_envelope = build_context_envelope(
+            current_context=state_summary,
+            allowed_actions=allowed_actions,
+            actor_context={
+                "actor_instance_id": user_message.actor_instance_id,
+                "source": "player",
+            },
+            timeline_entries=list(self.timeline),
+            max_timeline_items=12,
+            max_timeline_tokens=max(96, self.settings.action.max_tokens // 3),
+        )
 
         payload = prompt_module.build_user_payload(
             player_input=user_message.text,
             actor_instance_id=user_message.actor_instance_id,
             state_summary=state_summary,
+            context_envelope=context_envelope,
         )
         payload = fit_dict_to_token_budget(
             payload,
             max_tokens=max(128, self.settings.action.max_tokens // 2),
-            priority_keys=["state", "allowed_actions", "player_input", "state_summary"],
+            priority_keys=["state", "allowed_actions", "player_input", "state_summary", "context_envelope"],
         )
         response_schema = prompt_module.build_response_schema()
         examples = get_few_shot_examples_with_budget(
@@ -101,6 +127,14 @@ class PlayerIntentLlmProvider(ActionProvider):
         stripped = user_message.text.strip()
         if not stripped:
             return None
+        self._append_timeline(
+            {
+                "kind": "parser_fallback",
+                "actor_instance_id": user_message.actor_instance_id,
+                "fallback_reason": reason,
+                "converse_message": stripped,
+            }
+        )
         if self.telemetry is not None:
             self.telemetry.emit_fallback("player_intent", PLAYER_INTENT_PROMPT_VERSION, reason)
         metadata: Dict[str, Any] = {
@@ -152,6 +186,15 @@ class PlayerIntentLlmProvider(ActionProvider):
         if response is None:
             return action
 
+        self._append_timeline(
+            {
+                "kind": "llm_converse_output",
+                "actor_instance_id": user_message.actor_instance_id,
+                "reply": str(response.get("reply", "")),
+                "tone": str(response.get("tone", "")),
+            }
+        )
+
         metadata = dict(action.metadata)
         metadata["converse_response"] = {
             "reply": str(response.get("reply", "")),
@@ -160,6 +203,48 @@ class PlayerIntentLlmProvider(ActionProvider):
         }
         action.metadata = metadata
         return action
+
+    def _blocked_start_converse(self, session: Any, user_message: PlayerInputMessage) -> Optional[Action]:
+        if getattr(session, "state", None) is not GameState.PREGAME:
+            return None
+
+        missing: list[str] = []
+        if not list(getattr(session, "party", [])):
+            missing.append("at least one player")
+        if getattr(session, "dungeon", None) is None:
+            missing.append("a dungeon selection")
+
+        if not missing:
+            return None
+
+        if len(missing) == 1:
+            requirement_text = missing[0]
+        elif len(missing) == 2:
+            requirement_text = f"{missing[0]} and {missing[1]}"
+        else:
+            requirement_text = ", and ".join([", ".join(missing[:-1]), missing[-1]])
+
+        message = f"You cannot start yet. Please set up {requirement_text} first."
+        self._append_timeline(
+            {
+                "kind": "blocked_start",
+                "actor_instance_id": user_message.actor_instance_id,
+                "missing_requirements": list(missing),
+            }
+        )
+
+        return create_action(
+            action_type=ActionType.CONVERSE,
+            parameters={"message": message},
+            actor_instance_id=user_message.actor_instance_id,
+            raw_input=user_message.text,
+            metadata={
+                "provider": "player_intent_llm",
+                "fallback": True,
+                "fallback_reason": "blocked_start",
+                "missing_requirements": list(missing),
+            },
+        )
 
     def next_action(self, session: Any, ctx: EngineContext) -> Optional[Action]:
         if not self.queue:
@@ -222,6 +307,22 @@ class PlayerIntentLlmProvider(ActionProvider):
                     error_type="disallowed_action_type",
                 )
             return self._fallback_action(user_message, reason="disallowed_action_type")
+
+        if action.type is ActionType.START:
+            blocked = self._blocked_start_converse(session, user_message)
+            if blocked is not None:
+                if self.telemetry is not None:
+                    self.telemetry.emit_fallback("player_intent", PLAYER_INTENT_PROMPT_VERSION, "blocked_start")
+                return blocked
+
+        self._append_timeline(
+            {
+                "kind": "llm_action_parser_output",
+                "actor_instance_id": action.actor_instance_id,
+                "type": action.type.value,
+                "parameters": dict(action.parameters),
+            }
+        )
 
         if self.telemetry is not None:
             self.telemetry.emit_call(

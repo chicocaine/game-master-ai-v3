@@ -1,10 +1,12 @@
 import json
 from dataclasses import dataclass, field
+from collections import deque
 import time
 from typing import Any, Dict, Optional
 
 from game.llm.client import RetryPolicy, invoke_with_retry
 from game.llm.config import LlmSettings
+from game.llm.context_builder import build_context_envelope
 from game.llm.context_window import fit_dict_to_token_budget
 from game.llm.contracts import LlmMessage, LlmRequest
 from game.llm.errors import LlmError, LlmSchemaValidationError
@@ -23,13 +25,41 @@ class ConverseResponder:
     settings: LlmSettings
     retry_policy: RetryPolicy = field(default_factory=lambda: RetryPolicy(max_attempts=2, backoff_seconds=0.0))
     telemetry: LlmTelemetry | None = None
+    timeline: deque = field(default_factory=lambda: deque(maxlen=40))
+
+    def _append_timeline(self, entry: Dict[str, Any]) -> None:
+        self.timeline.append(dict(entry))
+
+    @staticmethod
+    def _allowed_actions_from_summary(state_summary: Dict[str, Any]) -> list[str]:
+        # Converse calls can happen across modes, so this stays minimal and state-derived when possible.
+        state = str(state_summary.get("state", "")).strip().lower()
+        if state == "pregame":
+            return ["create_player", "remove_player", "edit_player", "choose_dungeon", "start", "converse"]
+        if state == "exploration":
+            return ["move", "rest", "converse"]
+        if state == "encounter":
+            return ["attack", "cast_spell", "end_turn", "converse"]
+        if state == "postgame":
+            return ["finish", "converse"]
+        return ["converse"]
 
     def _build_request(self, player_message: str, state_summary: Dict[str, Any]) -> LlmRequest:
+        self._append_timeline({"kind": "player_input", "player_input": str(player_message)})
+        context_envelope = build_context_envelope(
+            current_context=state_summary,
+            allowed_actions=self._allowed_actions_from_summary(state_summary),
+            actor_context={"source": "player"},
+            timeline_entries=list(self.timeline),
+            max_timeline_items=12,
+            max_timeline_tokens=max(96, self.settings.conversation.max_tokens // 3),
+        )
         payload = converse_prompt.build_user_payload(player_message=player_message, state_summary=state_summary)
+        payload["context_envelope"] = context_envelope
         payload = fit_dict_to_token_budget(
             payload,
             max_tokens=max(64, self.settings.conversation.max_tokens // 2),
-            priority_keys=["domain", "player_message", "state_summary"],
+            priority_keys=["domain", "player_message", "state_summary", "context_envelope"],
         )
         examples = get_few_shot_examples_with_budget(
             domain="converse",
@@ -85,6 +115,13 @@ class ConverseResponder:
             response_text = response.text
             payload = parse_json_object(response.text)
             validated = self._validate_payload(payload)
+            self._append_timeline(
+                {
+                    "kind": "llm_converse_output",
+                    "reply": validated["reply"],
+                    "tone": validated["tone"],
+                }
+            )
             if self.telemetry is not None:
                 self.telemetry.emit_call(
                     domain="converse",

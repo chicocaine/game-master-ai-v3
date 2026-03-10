@@ -15,7 +15,12 @@ def system_instructions() -> str:
     return base_system_instructions("pregame", allowed)
 
 
-def build_user_payload(player_input: str, actor_instance_id: str, state_summary: Dict[str, Any]) -> Dict[str, Any]:
+def build_user_payload(
+    player_input: str,
+    actor_instance_id: str,
+    state_summary: Dict[str, Any],
+    context_envelope: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     allowed = allowed_action_values_for_state(GameState.PREGAME)
     payload = build_common_user_payload(
         player_input=player_input,
@@ -23,6 +28,7 @@ def build_user_payload(player_input: str, actor_instance_id: str, state_summary:
         state=GameState.PREGAME,
         state_summary=state_summary,
         allowed_action_values=allowed,
+        context_envelope=context_envelope,
     )
     payload["goal"] = "Form party, choose dungeon, and start game when ready."
     return payload

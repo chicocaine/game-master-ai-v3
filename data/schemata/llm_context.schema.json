@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "llm_context.schema.json",
+  "title": "LLM Context Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "identity",
+    "past_context",
+    "current_context",
+    "allowed_actions",
+    "actor_context"
+  ],
+  "properties": {
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "aliases"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "past_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timeline"],
+      "properties": {
+        "timeline": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      }
+    },
+    "current_context": {
+      "type": "object"
+    },
+    "allowed_actions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "actor_context": {
+      "type": "object"
+    }
+  }
+}

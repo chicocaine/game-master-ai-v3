@@ -1,11 +1,13 @@
 import json
 from dataclasses import dataclass, field
+from collections import deque
 import time
 from typing import Any, Dict, List, Optional
 
 from core.enums import EventType
 from game.llm.client import RetryPolicy, invoke_with_retry
 from game.llm.config import LlmSettings
+from game.llm.context_builder import build_context_envelope
 from game.llm.context_window import build_recent_window, fit_dict_to_token_budget
 from game.llm.contracts import LlmMessage, LlmRequest
 from game.llm.converse import ConverseResponder
@@ -40,6 +42,10 @@ class LlmNarrator:
     converse_responder: ConverseResponder | None = None
     telemetry: LlmTelemetry | None = None
     trigger_types: set[str] = field(default_factory=lambda: set(DEFAULT_NARRATION_TRIGGER_TYPES))
+    timeline: deque = field(default_factory=lambda: deque(maxlen=60))
+
+    def _append_timeline(self, entry: Dict[str, Any]) -> None:
+        self.timeline.append(dict(entry))
 
     @staticmethod
     def _event_types(events: List[Dict[str, Any]]) -> set[str]:
@@ -67,11 +73,24 @@ class LlmNarrator:
             max_items=12,
             max_tokens=max(96, self.settings.narration.max_tokens // 2),
         )
-        payload = narration_prompt.build_user_payload(events=recent_events, state_summary=build_state_summary(session))
+        state_summary = build_state_summary(session)
+        context_envelope = build_context_envelope(
+            current_context=state_summary,
+            allowed_actions=["narrate", "converse"],
+            actor_context={"source": "narrator"},
+            timeline_entries=list(self.timeline),
+            max_timeline_items=16,
+            max_timeline_tokens=max(96, self.settings.narration.max_tokens // 3),
+        )
+        payload = narration_prompt.build_user_payload(
+            events=recent_events,
+            state_summary=state_summary,
+            context_envelope=context_envelope,
+        )
         payload = fit_dict_to_token_budget(
             payload,
             max_tokens=max(128, self.settings.narration.max_tokens // 2),
-            priority_keys=["domain", "events", "state_summary"],
+            priority_keys=["domain", "events", "state_summary", "context_envelope"],
         )
         examples = get_few_shot_examples_with_budget(
             domain="narration",
@@ -112,6 +131,7 @@ class LlmNarrator:
     def narrate(self, events: List[Dict[str, Any]], session: Any, ctx: Any) -> Optional[str]:
         if not events:
             return None
+        self._append_timeline({"kind": "events", "events": list(events)})
         if not self.should_narrate(events):
             return None
 
@@ -128,6 +148,7 @@ class LlmNarrator:
             response_text = response.text
             payload = parse_json_object(response.text)
             validated = validate_narration_payload(payload)
+            self._append_timeline({"kind": "llm_narrator_output", "text": validated["text"]})
             if self.telemetry is not None:
                 self.telemetry.emit_call(
                     domain="narration",

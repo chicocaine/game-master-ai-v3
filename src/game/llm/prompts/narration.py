@@ -9,12 +9,19 @@ def system_instructions() -> str:
     )
 
 
-def build_user_payload(events: List[Dict[str, Any]], state_summary: Dict[str, Any]) -> Dict[str, Any]:
-    return {
+def build_user_payload(
+    events: List[Dict[str, Any]],
+    state_summary: Dict[str, Any],
+    context_envelope: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    payload = {
         "domain": "narration",
         "events": list(events),
         "state_summary": dict(state_summary),
     }
+    if context_envelope is not None:
+        payload["context_envelope"] = dict(context_envelope)
+    return payload
 
 
 def build_response_schema() -> Dict[str, Any]:

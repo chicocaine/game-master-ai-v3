@@ -64,6 +64,26 @@ def _optional_object(payload: Mapping[str, Any], key: str) -> dict[str, Any]:
     return dict(value)
 
 
+def _require_object(payload: Mapping[str, Any], key: str) -> dict[str, Any]:
+    value = payload.get(key)
+    if not isinstance(value, dict):
+        raise LlmSchemaValidationError(f"'{key}' must be an object.")
+    return dict(value)
+
+
+def _require_string_list(payload: Mapping[str, Any], key: str) -> list[str]:
+    value = payload.get(key)
+    if not isinstance(value, list):
+        raise LlmSchemaValidationError(f"'{key}' must be a list.")
+
+    items: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise LlmSchemaValidationError(f"'{key}' must contain non-empty strings.")
+        items.append(item.strip())
+    return items
+
+
 def validate_action_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     action_type = _require_non_empty_string(payload, "type")
     actor_instance_id = _optional_string(payload, "actor_instance_id").strip()
@@ -102,4 +122,50 @@ def validate_narration_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
         "style": style,
         "focus_event_ids": focus_event_ids,
         "metadata": metadata,
+    }
+
+
+def validate_context_envelope(payload: Mapping[str, Any]) -> dict[str, Any]:
+    identity = _require_object(payload, "identity")
+    past_context = _require_object(payload, "past_context")
+    current_context = _require_object(payload, "current_context")
+    allowed_actions = _require_string_list(payload, "allowed_actions")
+    actor_context = _require_object(payload, "actor_context")
+
+    identity_name = identity.get("name", "")
+    if not isinstance(identity_name, str) or not identity_name.strip():
+        raise LlmSchemaValidationError("'identity.name' must be a non-empty string.")
+
+    aliases = identity.get("aliases", [])
+    if aliases is None:
+        aliases = []
+    if not isinstance(aliases, list):
+        raise LlmSchemaValidationError("'identity.aliases' must be a list.")
+    normalized_aliases: list[str] = []
+    for alias in aliases:
+        if not isinstance(alias, str) or not alias.strip():
+            raise LlmSchemaValidationError("'identity.aliases' must contain non-empty strings.")
+        normalized_aliases.append(alias.strip())
+
+    timeline = past_context.get("timeline", [])
+    if timeline is None:
+        timeline = []
+    if not isinstance(timeline, list):
+        raise LlmSchemaValidationError("'past_context.timeline' must be a list.")
+    for entry in timeline:
+        if not isinstance(entry, dict):
+            raise LlmSchemaValidationError("'past_context.timeline' entries must be objects.")
+
+    return {
+        "identity": {
+            "name": identity_name.strip(),
+            "aliases": normalized_aliases,
+        },
+        "past_context": {
+            **past_context,
+            "timeline": [dict(entry) for entry in timeline],
+        },
+        "current_context": current_context,
+        "allowed_actions": allowed_actions,
+        "actor_context": actor_context,
     }

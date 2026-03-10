@@ -15,7 +15,12 @@ def system_instructions() -> str:
     return base_system_instructions("encounter", allowed)
 
 
-def build_user_payload(player_input: str, actor_instance_id: str, state_summary: Dict[str, Any]) -> Dict[str, Any]:
+def build_user_payload(
+    player_input: str,
+    actor_instance_id: str,
+    state_summary: Dict[str, Any],
+    context_envelope: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     allowed = allowed_action_values_for_state(GameState.ENCOUNTER)
     payload = build_common_user_payload(
         player_input=player_input,
@@ -23,6 +28,7 @@ def build_user_payload(player_input: str, actor_instance_id: str, state_summary:
         state=GameState.ENCOUNTER,
         state_summary=state_summary,
         allowed_action_values=allowed,
+        context_envelope=context_envelope,
     )
     payload["goal"] = "Resolve tactical combat decisions for the current turn."
     return payload

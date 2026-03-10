@@ -60,14 +60,18 @@ def build_common_user_payload(
     state: GameState,
     state_summary: Dict[str, Any],
     allowed_action_values: list[str],
+    context_envelope: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    return {
+    payload = {
         "state": state.value,
         "actor_instance_id": actor_instance_id,
         "allowed_actions": list(allowed_action_values),
         "player_input": player_input,
         "state_summary": dict(state_summary),
     }
+    if context_envelope is not None:
+        payload["context_envelope"] = dict(context_envelope)
+    return payload
 
 
 def base_system_instructions(domain_name: str, allowed_action_values: list[str]) -> str:

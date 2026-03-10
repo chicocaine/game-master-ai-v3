@@ -10,7 +10,12 @@ from game.llm.errors import (
     LlmSchemaValidationError,
     LlmTimeoutError,
 )
-from game.llm.json_parse import parse_json_object, validate_action_payload, validate_narration_payload
+from game.llm.json_parse import (
+    parse_json_object,
+    validate_action_payload,
+    validate_context_envelope,
+    validate_narration_payload,
+)
 
 
 class _FakeClient:
@@ -170,3 +175,55 @@ def test_invoke_with_retry_does_not_retry_non_retriable_errors():
         )
 
     assert client.calls == 1
+
+
+def test_validate_context_envelope_accepts_minimum_valid_shape():
+    payload = validate_context_envelope(
+        {
+            "identity": {"name": "game-master-ai", "aliases": ["dm", "game master"]},
+            "past_context": {"timeline": [{"player_input": "move to room 2"}]},
+            "current_context": {"state": "exploration", "current_room_id": "room_1"},
+            "allowed_actions": ["move", "rest", "converse"],
+            "actor_context": {"actor_instance_id": "player_1"},
+        }
+    )
+
+    assert payload["identity"]["name"] == "game-master-ai"
+    assert payload["allowed_actions"] == ["move", "rest", "converse"]
+    assert payload["past_context"]["timeline"][0]["player_input"] == "move to room 2"
+
+
+def test_validate_context_envelope_rejects_missing_required_sections():
+    with pytest.raises(LlmSchemaValidationError):
+        validate_context_envelope(
+            {
+                "identity": {"name": "game-master-ai", "aliases": []},
+                "current_context": {},
+                "allowed_actions": ["converse"],
+                "actor_context": {},
+            }
+        )
+
+
+def test_validate_context_envelope_rejects_type_mismatches():
+    with pytest.raises(LlmSchemaValidationError):
+        validate_context_envelope(
+            {
+                "identity": {"name": "game-master-ai", "aliases": "dm"},
+                "past_context": {"timeline": []},
+                "current_context": {},
+                "allowed_actions": ["converse"],
+                "actor_context": {},
+            }
+        )
+
+    with pytest.raises(LlmSchemaValidationError):
+        validate_context_envelope(
+            {
+                "identity": {"name": "game-master-ai", "aliases": ["dm"]},
+                "past_context": {"timeline": "bad"},
+                "current_context": {},
+                "allowed_actions": ["converse"],
+                "actor_context": {},
+            }
+        )

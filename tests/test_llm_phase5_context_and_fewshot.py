@@ -1,4 +1,5 @@
 from game.llm.context_window import build_recent_window, estimate_tokens, fit_dict_to_token_budget, truncate_text_to_token_budget
+from game.llm.context_builder import build_context_envelope
 from game.llm.fewshot import available_domains, get_few_shot_examples, get_few_shot_examples_with_budget
 
 
@@ -71,3 +72,38 @@ def test_fewshot_budget_truncates_examples_deterministically():
 
     assert examples_first == examples_second
     assert len(examples_first) <= 3
+
+
+def test_context_envelope_builds_chronological_recent_timeline():
+    timeline = [
+        {"idx": 1, "player_input": "first"},
+        {"idx": 2, "player_input": "second"},
+        {"idx": 3, "player_input": "third"},
+        {"idx": 4, "player_input": "fourth"},
+    ]
+
+    envelope = build_context_envelope(
+        current_context={"state": "exploration", "current_room_id": "room_1"},
+        allowed_actions=["move", "rest", "converse"],
+        actor_context={"actor_instance_id": "player_1", "source": "player"},
+        timeline_entries=timeline,
+        max_timeline_items=3,
+        max_timeline_tokens=200,
+    )
+
+    ids = [entry["idx"] for entry in envelope["past_context"]["timeline"]]
+    assert ids == [2, 3, 4]
+
+
+def test_context_envelope_keeps_required_sections_with_empty_timeline():
+    envelope = build_context_envelope(
+        current_context={"state": "pregame"},
+        allowed_actions=["create_player", "converse"],
+        actor_context={"source": "player"},
+        timeline_entries=[],
+    )
+
+    assert envelope["identity"]["name"] == "game-master-ai"
+    assert envelope["past_context"]["timeline"] == []
+    assert envelope["current_context"]["state"] == "pregame"
+    assert envelope["allowed_actions"] == ["create_player", "converse"]
