@@ -3,7 +3,7 @@ from core.action_result import ActionResult
 from core.enums import ActionType
 from game.engine.interfaces import EngineContext
 from game.engine.loop import run_engine_loop
-from game.engine.providers import QueueActionProvider
+from game.engine.providers import QueueActionProvider, TurnAwareEnemyStubProvider
 from game.enums import GameState
 
 
@@ -18,6 +18,36 @@ class _StubSession:
             self.state = GameState.POSTGAME
             return ActionResult.success(events=[{"type": "game_finished"}])
         return ActionResult.success(events=[{"type": "action_handled", "action_id": action.action_id}])
+
+
+class _EncounterTurnSession:
+    def __init__(self) -> None:
+        self.state = GameState.ENCOUNTER
+        self.handled_actions: list[tuple[ActionType, str]] = []
+        self.encounter = type("EncounterStateStub", (), {})()
+        self.encounter.turn_order = ["player_1", "enemy_1"]
+        self.encounter.current_turn_index = 0
+
+    def _current_actor(self) -> str:
+        return self.encounter.turn_order[self.encounter.current_turn_index]
+
+    def handle_action(self, action):
+        self.handled_actions.append((action.type, action.actor_instance_id))
+
+        if action.type is ActionType.END_TURN:
+            # Deterministic turn handoff for integration testing.
+            self.encounter.current_turn_index = (self.encounter.current_turn_index + 1) % len(self.encounter.turn_order)
+
+        return ActionResult.success(
+            events=[
+                {
+                    "type": "action_handled",
+                    "action_type": action.type.value,
+                    "actor_instance_id": action.actor_instance_id,
+                    "next_actor_instance_id": self._current_actor(),
+                }
+            ]
+        )
 
 
 class _CollectingSink:
@@ -213,3 +243,73 @@ def test_engine_loop_stops_on_postgame_state():
     assert outcome.stopped_reason == "postgame"
     assert outcome.steps == 1
     assert session.state is GameState.POSTGAME
+
+
+def test_engine_loop_stops_idle_when_no_provider_has_action():
+    session = _StubSession()
+    persistence = _PersistenceRecorder()
+    ctx = EngineContext(session_id="s7")
+
+    outcome = run_engine_loop(
+        session=session,
+        providers=[QueueActionProvider([])],
+        event_sinks=[],
+        narrator=None,
+        persistence=persistence,
+        ctx=ctx,
+        max_steps=5,
+    )
+
+    assert outcome.stopped_reason == "idle"
+    assert outcome.steps == 0
+    assert persistence.calls == 0
+    assert ctx.turn_index == 0
+
+
+def test_engine_loop_handoff_player_then_enemy_stub_provider():
+    player_end_turn = create_action(ActionType.END_TURN, {}, actor_instance_id="player_1")
+    providers = [QueueActionProvider([player_end_turn]), TurnAwareEnemyStubProvider()]
+    session = _EncounterTurnSession()
+    persistence = _PersistenceRecorder()
+    ctx = EngineContext(session_id="s8")
+
+    outcome = run_engine_loop(
+        session=session,
+        providers=providers,
+        event_sinks=[],
+        narrator=None,
+        persistence=persistence,
+        ctx=ctx,
+        max_steps=2,
+    )
+
+    assert outcome.stopped_reason == "max_steps"
+    assert outcome.steps == 2
+    assert session.handled_actions == [
+        (ActionType.END_TURN, "player_1"),
+        (ActionType.END_TURN, "enemy_1"),
+    ]
+    assert persistence.calls == 2
+    assert ctx.turn_index == 2
+
+
+def test_engine_loop_uses_enemy_stub_when_primary_provider_empty_on_enemy_turn():
+    session = _EncounterTurnSession()
+    session.encounter.current_turn_index = 1
+    providers = [QueueActionProvider([]), TurnAwareEnemyStubProvider()]
+    persistence = _PersistenceRecorder()
+    ctx = EngineContext(session_id="s9")
+
+    outcome = run_engine_loop(
+        session=session,
+        providers=providers,
+        event_sinks=[],
+        narrator=None,
+        persistence=persistence,
+        ctx=ctx,
+        max_steps=1,
+    )
+
+    assert outcome.stopped_reason == "max_steps"
+    assert outcome.steps == 1
+    assert session.handled_actions == [(ActionType.END_TURN, "enemy_1")]
