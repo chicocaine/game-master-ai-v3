@@ -54,6 +54,7 @@ class EventType(Enum):
     ENCOUNTER_ENDED = "encounter_ended"
     DICE_ROLLED = "dice_rolled"
     INITIATIVE_ROLLED = "initiative_rolled"
+    DC_SAVE_THROW_ROLLED = "dc_save_throw_rolled"
     ATTACK_DECLARED = "attack_declared"
     ATTACK_HIT = "attack_hit"
     ATTACK_MISSED = "attack_missed"
