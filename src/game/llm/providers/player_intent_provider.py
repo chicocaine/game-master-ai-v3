@@ -1,0 +1,144 @@
+from collections import deque
+from dataclasses import dataclass, field
+import json
+from typing import Any, Deque, Dict, Optional
+
+from core.action import Action
+from core.action import create_action
+from core.enums import ActionType
+from game.engine.interfaces import ActionProvider, EngineContext
+from game.llm.client import RetryPolicy, invoke_with_retry
+from game.llm.config import LlmSettings
+from game.llm.contracts import LlmMessage, LlmRequest
+from game.llm.errors import LlmError
+from game.llm.json_parse import parse_json_object, validate_action_payload
+from game.llm.prompts.base import allowed_action_values_for_state
+from game.llm.routing import build_state_summary, prompt_module_for_state
+
+
+@dataclass(frozen=True)
+class PlayerInputMessage:
+    text: str
+    actor_instance_id: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class PlayerIntentLlmProvider(ActionProvider):
+    client: Any
+    settings: LlmSettings
+    retry_policy: RetryPolicy = field(default_factory=lambda: RetryPolicy(max_attempts=2, backoff_seconds=0.0))
+    include_provider_metadata: bool = True
+    queue: Deque[PlayerInputMessage] = field(default_factory=deque)
+
+    def enqueue(self, text: str, actor_instance_id: str = "", metadata: Dict[str, Any] | None = None) -> None:
+        self.queue.append(
+            PlayerInputMessage(
+                text=str(text),
+                actor_instance_id=str(actor_instance_id),
+                metadata=dict(metadata or {}),
+            )
+        )
+
+    def pending_count(self) -> int:
+        return len(self.queue)
+
+    def _build_request(self, session: Any, user_message: PlayerInputMessage) -> LlmRequest:
+        prompt_module = prompt_module_for_state(session.state)
+        state_summary = build_state_summary(session)
+
+        payload = prompt_module.build_user_payload(
+            player_input=user_message.text,
+            actor_instance_id=user_message.actor_instance_id,
+            state_summary=state_summary,
+        )
+        response_schema = prompt_module.build_response_schema()
+        examples = prompt_module.few_shot_examples()
+
+        messages = [
+            LlmMessage(role="system", content=prompt_module.system_instructions()),
+            LlmMessage(role="system", content=json.dumps({"few_shot_examples": examples})),
+            LlmMessage(role="user", content=json.dumps(payload)),
+        ]
+
+        return LlmRequest(
+            model=self.settings.model,
+            messages=messages,
+            temperature=self.settings.action.temperature,
+            max_tokens=self.settings.action.max_tokens,
+            timeout_seconds=self.settings.timeout_seconds,
+            response_format={"type": "json_schema", "json_schema": response_schema},
+            metadata={
+                "provider": "player_intent_llm",
+                "state": session.state.value,
+            },
+        )
+
+    def _allowed_action_values(self, session: Any) -> list[str]:
+        return allowed_action_values_for_state(session.state)
+
+    def _fallback_action(self, user_message: PlayerInputMessage, reason: str) -> Optional[Action]:
+        stripped = user_message.text.strip()
+        if not stripped:
+            return None
+        metadata: Dict[str, Any] = {
+            "provider": "player_intent_llm",
+            "fallback": True,
+            "fallback_reason": reason,
+        }
+        if self.include_provider_metadata and user_message.metadata:
+            metadata["input_metadata"] = dict(user_message.metadata)
+
+        return create_action(
+            action_type=ActionType.CONVERSE,
+            parameters={"message": stripped},
+            actor_instance_id=user_message.actor_instance_id,
+            raw_input=user_message.text,
+            metadata=metadata,
+        )
+
+    def _action_from_payload(self, payload: dict[str, Any], user_message: PlayerInputMessage) -> Action:
+        validated = validate_action_payload(payload)
+        action_data = {
+            "type": validated["type"],
+            "parameters": validated["parameters"],
+            "actor_instance_id": validated["actor_instance_id"] or user_message.actor_instance_id,
+            "raw_input": user_message.text,
+            "reasoning": validated["reasoning"],
+            "metadata": validated["metadata"],
+        }
+
+        if self.include_provider_metadata:
+            metadata = dict(action_data.get("metadata", {}))
+            metadata["provider"] = "player_intent_llm"
+            if user_message.metadata:
+                metadata["input_metadata"] = dict(user_message.metadata)
+            action_data["metadata"] = metadata
+
+        return Action.from_dict(action_data)
+
+    def next_action(self, session: Any, ctx: EngineContext) -> Optional[Action]:
+        if not self.queue:
+            return None
+
+        user_message = self.queue.popleft()
+        request = self._build_request(session, user_message)
+
+        try:
+            response = invoke_with_retry(
+                client=self.client,
+                request=request,
+                retry_policy=self.retry_policy,
+            )
+            payload = parse_json_object(response.text)
+            action = self._action_from_payload(payload, user_message)
+        except LlmError as exc:
+            return self._fallback_action(user_message, reason=f"llm_error:{exc.__class__.__name__}")
+        except Exception as exc:  # pragma: no cover - defensive safety
+            return self._fallback_action(user_message, reason=f"unexpected_error:{exc.__class__.__name__}")
+
+        allowed_actions = set(self._allowed_action_values(session))
+        if action.type.value not in allowed_actions:
+            return self._fallback_action(user_message, reason="disallowed_action_type")
+
+        return action
