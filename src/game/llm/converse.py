@@ -4,8 +4,10 @@ from typing import Any, Dict, Optional
 
 from game.llm.client import RetryPolicy, invoke_with_retry
 from game.llm.config import LlmSettings
+from game.llm.context_window import fit_dict_to_token_budget
 from game.llm.contracts import LlmMessage, LlmRequest
 from game.llm.errors import LlmError, LlmSchemaValidationError
+from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object
 from game.llm.prompts import converse as converse_prompt
 
@@ -18,12 +20,22 @@ class ConverseResponder:
 
     def _build_request(self, player_message: str, state_summary: Dict[str, Any]) -> LlmRequest:
         payload = converse_prompt.build_user_payload(player_message=player_message, state_summary=state_summary)
+        payload = fit_dict_to_token_budget(
+            payload,
+            max_tokens=max(64, self.settings.conversation.max_tokens // 2),
+            priority_keys=["domain", "player_message", "state_summary"],
+        )
+        examples = get_few_shot_examples_with_budget(
+            domain="converse",
+            max_examples=3,
+            max_tokens=max(48, self.settings.conversation.max_tokens // 4),
+        )
 
         return LlmRequest(
             model=self.settings.model,
             messages=[
                 LlmMessage(role="system", content=converse_prompt.system_instructions()),
-                LlmMessage(role="system", content=json.dumps({"few_shot_examples": converse_prompt.few_shot_examples()})),
+                LlmMessage(role="system", content=json.dumps({"few_shot_examples": examples})),
                 LlmMessage(role="user", content=json.dumps(payload)),
             ],
             temperature=self.settings.conversation.temperature,

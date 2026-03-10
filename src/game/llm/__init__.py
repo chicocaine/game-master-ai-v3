@@ -2,6 +2,7 @@ from game.llm.client import LlmClient, RetryPolicy, invoke_with_retry
 from game.llm.config import LlmDomainSettings, LlmSettings, load_llm_settings
 from game.llm.converse import ConverseResponder
 from game.llm.contracts import LlmMessage, LlmRequest, LlmResponse
+from game.llm.context_window import build_recent_window, estimate_tokens, fit_dict_to_token_budget
 from game.llm.errors import (
     LlmConfigurationError,
     LlmError,
@@ -11,6 +12,7 @@ from game.llm.errors import (
     LlmTimeoutError,
     LlmTransportError,
 )
+from game.llm.fewshot import available_domains, get_few_shot_examples, get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object, validate_action_payload, validate_narration_payload
 from game.llm.narrator.llm_narrator import LlmNarrator
 
@@ -18,6 +20,12 @@ __all__ = [
     "LlmClient",
     "LlmConfigurationError",
     "ConverseResponder",
+    "available_domains",
+    "build_recent_window",
+    "estimate_tokens",
+    "fit_dict_to_token_budget",
+    "get_few_shot_examples",
+    "get_few_shot_examples_with_budget",
     "LlmDomainSettings",
     "LlmError",
     "LlmMessage",

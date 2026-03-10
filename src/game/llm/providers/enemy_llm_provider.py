@@ -9,8 +9,10 @@ from game.engine.interfaces import ActionProvider, EngineContext
 from game.enums import GameState
 from game.llm.client import RetryPolicy, invoke_with_retry
 from game.llm.config import LlmSettings
+from game.llm.context_window import fit_dict_to_token_budget
 from game.llm.contracts import LlmMessage, LlmRequest
 from game.llm.errors import LlmError
+from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object, validate_action_payload
 from game.llm.prompts import enemy_ai
 
@@ -106,13 +108,22 @@ class EnemyLlmActionProvider(ActionProvider):
         )
 
     def _build_request(self, enemy_id: str, enemy_persona: str, combat_summary: Dict[str, Any]) -> LlmRequest:
+        compact_summary = fit_dict_to_token_budget(
+            combat_summary,
+            max_tokens=max(96, self.settings.enemy.max_tokens // 2),
+            priority_keys=["state", "current_enemy_id", "turn_order", "player_targets"],
+        )
         payload = enemy_ai.build_user_payload(
             actor_instance_id=enemy_id,
             enemy_persona=enemy_persona,
-            combat_summary=combat_summary,
+            combat_summary=compact_summary,
         )
         schema = enemy_ai.build_response_schema()
-        examples = enemy_ai.few_shot_examples()
+        examples = get_few_shot_examples_with_budget(
+            domain="enemy_ai",
+            max_examples=4,
+            max_tokens=max(64, self.settings.enemy.max_tokens // 4),
+        )
 
         return LlmRequest(
             model=self.settings.model,

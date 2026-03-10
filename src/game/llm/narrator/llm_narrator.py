@@ -5,9 +5,11 @@ from typing import Any, Dict, List, Optional
 from core.enums import EventType
 from game.llm.client import RetryPolicy, invoke_with_retry
 from game.llm.config import LlmSettings
+from game.llm.context_window import build_recent_window, fit_dict_to_token_budget
 from game.llm.contracts import LlmMessage, LlmRequest
 from game.llm.converse import ConverseResponder
 from game.llm.errors import LlmError
+from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object, validate_narration_payload
 from game.llm.prompts import narration as narration_prompt
 from game.llm.routing import build_state_summary
@@ -54,13 +56,28 @@ class LlmNarrator:
         return ""
 
     def _narration_request(self, events: List[Dict[str, Any]], session: Any) -> LlmRequest:
-        payload = narration_prompt.build_user_payload(events=events, state_summary=build_state_summary(session))
+        recent_events = build_recent_window(
+            events,
+            max_items=12,
+            max_tokens=max(96, self.settings.narration.max_tokens // 2),
+        )
+        payload = narration_prompt.build_user_payload(events=recent_events, state_summary=build_state_summary(session))
+        payload = fit_dict_to_token_budget(
+            payload,
+            max_tokens=max(128, self.settings.narration.max_tokens // 2),
+            priority_keys=["domain", "events", "state_summary"],
+        )
+        examples = get_few_shot_examples_with_budget(
+            domain="narration",
+            max_examples=3,
+            max_tokens=max(64, self.settings.narration.max_tokens // 4),
+        )
 
         return LlmRequest(
             model=self.settings.model,
             messages=[
                 LlmMessage(role="system", content=narration_prompt.system_instructions()),
-                LlmMessage(role="system", content=json.dumps({"few_shot_examples": narration_prompt.few_shot_examples()})),
+                LlmMessage(role="system", content=json.dumps({"few_shot_examples": examples})),
                 LlmMessage(role="user", content=json.dumps(payload)),
             ],
             temperature=self.settings.narration.temperature,

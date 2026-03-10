@@ -10,8 +10,10 @@ from game.engine.interfaces import ActionProvider, EngineContext
 from game.llm.client import RetryPolicy, invoke_with_retry
 from game.llm.config import LlmSettings
 from game.llm.converse import ConverseResponder
+from game.llm.context_window import fit_dict_to_token_budget
 from game.llm.contracts import LlmMessage, LlmRequest
 from game.llm.errors import LlmError
+from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object, validate_action_payload
 from game.llm.prompts.base import allowed_action_values_for_state
 from game.llm.routing import build_state_summary, prompt_module_for_state
@@ -54,8 +56,17 @@ class PlayerIntentLlmProvider(ActionProvider):
             actor_instance_id=user_message.actor_instance_id,
             state_summary=state_summary,
         )
+        payload = fit_dict_to_token_budget(
+            payload,
+            max_tokens=max(128, self.settings.action.max_tokens // 2),
+            priority_keys=["state", "allowed_actions", "player_input", "state_summary"],
+        )
         response_schema = prompt_module.build_response_schema()
-        examples = prompt_module.few_shot_examples()
+        examples = get_few_shot_examples_with_budget(
+            domain=session.state.value,
+            max_examples=4,
+            max_tokens=max(64, self.settings.action.max_tokens // 4),
+        )
 
         messages = [
             LlmMessage(role="system", content=prompt_module.system_instructions()),
