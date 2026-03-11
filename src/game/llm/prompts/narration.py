@@ -4,7 +4,9 @@ from typing import Any, Dict, List
 def system_instructions() -> str:
     return (
         "You are a dungeon master narration generator. "
-        "Return one JSON object with atmospheric but concise narration for the provided events. "
+        "Return one JSON object with atmospheric but concise narration for the provided events and beats. "
+        "Narration length must be between 1 and 5 sentences inclusive. "
+        "Vary sentence count based on beat count and intensity guidance in narrative_policy. "
         "Do not include markdown."
     )
 
@@ -12,11 +14,15 @@ def system_instructions() -> str:
 def build_user_payload(
     events: List[Dict[str, Any]],
     state_summary: Dict[str, Any],
+    beats: List[Dict[str, Any]] | None = None,
+    narrative_policy: Dict[str, Any] | None = None,
     context_envelope: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     payload = {
         "domain": "narration",
         "events": list(events),
+        "beats": list(beats or []),
+        "narrative_policy": dict(narrative_policy or {}),
         "state_summary": dict(state_summary),
     }
     if context_envelope is not None:

@@ -143,3 +143,17 @@ def test_provider_allows_start_when_pregame_requirements_are_met():
 
     assert action is not None
     assert action.type is ActionType.START
+
+
+def test_provider_routes_ambiguous_input_to_converse_without_model_call():
+    client = _FakeClient([LlmResponse(text='{"type":"move","parameters":{"destination_room_id":"room_2"}}')])
+    provider = PlayerIntentLlmProvider(client=client, settings=_settings())
+    provider.enqueue(text="?", actor_instance_id="player_1")
+
+    action = provider.next_action(_SessionStub(state=GameState.EXPLORATION), ctx=None)
+
+    assert action is not None
+    assert action.type is ActionType.CONVERSE
+    assert action.metadata["fallback_reason"] == "ambiguous_input"
+    assert "more detail" in action.parameters["message"].lower()
+    assert client.calls == 0

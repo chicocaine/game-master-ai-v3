@@ -16,7 +16,7 @@ from game.llm.prompts import converse as converse_prompt
 from game.llm.telemetry import LlmTelemetry
 
 
-CONVERSE_PROMPT_VERSION = "converse.v1"
+CONVERSE_PROMPT_VERSION = "converse.v2"
 
 
 @dataclass
@@ -105,6 +105,22 @@ class ConverseResponder:
             "metadata": dict(metadata),
         }
 
+    @staticmethod
+    def _classify_response(player_message: str, state_summary: Dict[str, Any], reply: str) -> str:
+        message = str(player_message or "").strip().lower()
+        state = str(state_summary.get("state", "")).strip().lower()
+        reply_text = str(reply or "").strip().lower()
+
+        if state == "pregame" and "start" in message and (
+            "cannot" in reply_text or "can't" in reply_text or "before" in reply_text
+        ):
+            return "blocked_transition"
+        if message.endswith("?"):
+            return "world_query"
+        if len(message.split()) <= 3:
+            return "clarification"
+        return "light_roleplay"
+
     def generate(self, player_message: str, state_summary: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         request = self._build_request(player_message=player_message, state_summary=state_summary)
         started = time.perf_counter()
@@ -115,6 +131,15 @@ class ConverseResponder:
             response_text = response.text
             payload = parse_json_object(response.text)
             validated = self._validate_payload(payload)
+            metadata = dict(validated["metadata"])
+            response_class = metadata.get("response_class")
+            if not isinstance(response_class, str) or not response_class.strip():
+                metadata["response_class"] = self._classify_response(
+                    player_message=player_message,
+                    state_summary=state_summary,
+                    reply=validated["reply"],
+                )
+            validated["metadata"] = metadata
             self._append_timeline(
                 {
                     "kind": "llm_converse_output",

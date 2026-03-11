@@ -1,6 +1,7 @@
 import json
 from dataclasses import dataclass, field
 from collections import deque
+import re
 import time
 from typing import Any, Dict, List, Optional
 
@@ -14,12 +15,13 @@ from game.llm.converse import ConverseResponder
 from game.llm.errors import LlmError
 from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object, validate_narration_payload
+from game.llm.narrator.beats import build_event_beats, target_sentences_for_beats
 from game.llm.prompts import narration as narration_prompt
 from game.llm.routing import build_state_summary
 from game.llm.telemetry import LlmTelemetry
 
 
-NARRATION_PROMPT_VERSION = "narration.v1"
+NARRATION_PROMPT_VERSION = "narration.v2"
 
 
 DEFAULT_NARRATION_TRIGGER_TYPES = {
@@ -43,6 +45,18 @@ class LlmNarrator:
     telemetry: LlmTelemetry | None = None
     trigger_types: set[str] = field(default_factory=lambda: set(DEFAULT_NARRATION_TRIGGER_TYPES))
     timeline: deque = field(default_factory=lambda: deque(maxlen=60))
+
+    @staticmethod
+    def _limit_sentences(text: str, max_sentences: int = 5) -> str:
+        candidate = str(text or "").strip()
+        if not candidate:
+            return ""
+
+        parts = re.split(r"(?<=[.!?])\s+", candidate)
+        parts = [part.strip() for part in parts if part.strip()]
+        if len(parts) <= max_sentences:
+            return candidate
+        return " ".join(parts[:max_sentences]).strip()
 
     def _append_timeline(self, entry: Dict[str, Any]) -> None:
         self.timeline.append(dict(entry))
@@ -73,6 +87,8 @@ class LlmNarrator:
             max_items=12,
             max_tokens=max(96, self.settings.narration.max_tokens // 2),
         )
+        beats = build_event_beats(recent_events)
+        target_sentences = target_sentences_for_beats(beats, max_sentences=5)
         state_summary = build_state_summary(session)
         context_envelope = build_context_envelope(
             current_context=state_summary,
@@ -85,12 +101,17 @@ class LlmNarrator:
         payload = narration_prompt.build_user_payload(
             events=recent_events,
             state_summary=state_summary,
+            beats=beats,
+            narrative_policy={
+                "max_sentences": 5,
+                "target_sentences": target_sentences,
+            },
             context_envelope=context_envelope,
         )
         payload = fit_dict_to_token_budget(
             payload,
             max_tokens=max(128, self.settings.narration.max_tokens // 2),
-            priority_keys=["domain", "events", "state_summary", "context_envelope"],
+            priority_keys=["domain", "events", "beats", "narrative_policy", "state_summary", "context_envelope"],
         )
         examples = get_few_shot_examples_with_budget(
             domain="narration",
@@ -109,7 +130,11 @@ class LlmNarrator:
             max_tokens=self.settings.narration.max_tokens,
             timeout_seconds=self.settings.timeout_seconds,
             response_format={"type": "json_schema", "json_schema": narration_prompt.build_response_schema()},
-            metadata={"provider": "narration_llm", "prompt_version": NARRATION_PROMPT_VERSION},
+            metadata={
+                "provider": "narration_llm",
+                "prompt_version": NARRATION_PROMPT_VERSION,
+                "beat_count": len(beats),
+            },
         )
 
     def _generate_converse(self, events: List[Dict[str, Any]], session: Any) -> Optional[str]:
@@ -148,7 +173,8 @@ class LlmNarrator:
             response_text = response.text
             payload = parse_json_object(response.text)
             validated = validate_narration_payload(payload)
-            self._append_timeline({"kind": "llm_narrator_output", "text": validated["text"]})
+            bounded_text = self._limit_sentences(validated["text"], max_sentences=5)
+            self._append_timeline({"kind": "llm_narrator_output", "text": bounded_text})
             if self.telemetry is not None:
                 self.telemetry.emit_call(
                     domain="narration",
@@ -158,7 +184,7 @@ class LlmNarrator:
                     response_text=response_text,
                 )
                 self.telemetry.emit_validation("narration", NARRATION_PROMPT_VERSION, valid=True)
-            return validated["text"]
+            return bounded_text
         except LlmError as exc:
             if self.telemetry is not None:
                 self.telemetry.emit_call(

@@ -17,6 +17,8 @@ def _utc_now_iso() -> str:
 
 def _is_sensitive_key(key: str) -> bool:
     lowered = key.lower()
+    if lowered.endswith("_token_estimate"):
+        return False
     return any(part in lowered for part in _REDACT_KEYS)
 
 
@@ -32,6 +34,22 @@ def sanitize_payload(value: Any) -> Any:
     if isinstance(value, list):
         return [sanitize_payload(item) for item in value]
     return value
+
+
+def _extract_context_token_estimate(request: LlmRequest) -> int:
+    for message in request.messages:
+        content = (message.content or "").strip()
+        if not content.startswith("{"):
+            continue
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            continue
+        context_envelope = payload.get("context_envelope")
+        if context_envelope is None:
+            continue
+        return estimate_tokens_from_text(json.dumps(context_envelope, ensure_ascii=True, sort_keys=True))
+    return 0
 
 
 class LlmTelemetrySink(Protocol):
@@ -140,6 +158,8 @@ class LlmTelemetry:
                 "error_type": error_type,
                 "token_estimate_input": self._input_token_estimate(request),
                 "token_estimate_output": estimate_tokens_from_text(response_text),
+                "context_token_estimate": _extract_context_token_estimate(request),
+                "beat_count": int(metadata.get("beat_count", 0) or 0),
                 "request_metadata": metadata,
             }
         )

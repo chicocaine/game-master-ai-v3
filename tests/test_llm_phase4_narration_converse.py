@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from types import SimpleNamespace
 
@@ -138,3 +139,57 @@ def test_player_intent_provider_keeps_converse_action_when_responder_fails():
     assert action is not None
     assert action.type is ActionType.CONVERSE
     assert "converse_response" not in action.metadata
+
+
+def test_converse_responder_adds_response_class_metadata_when_missing():
+    converse_client = _FakeClient([LlmResponse(text='{"reply":"You can move to room_2.","tone":"helpful"}')])
+    responder = ConverseResponder(client=converse_client, settings=_settings())
+
+    payload = responder.generate("Where can I go?", {"state": "exploration"})
+
+    assert payload is not None
+    assert payload["metadata"]["response_class"] in {
+        "clarification",
+        "world_query",
+        "light_roleplay",
+        "blocked_transition",
+    }
+
+
+def test_llm_narrator_includes_beats_and_sentence_policy_in_request_payload():
+    client = _FakeClient([LlmResponse(text='{"text":"One. Two."}')])
+    narrator = LlmNarrator(client=client, settings=_settings())
+
+    events = [
+        {"type": "room_entered", "room_id": "room_2"},
+        {"type": "attack_hit", "attacker": "player_1", "target": "enemy_1"},
+        {"type": "damage_applied", "target": "enemy_1", "amount": 3},
+    ]
+
+    output = narrator.narrate(events, _session(GameState.EXPLORATION), EngineContext(session_id="n6"))
+
+    assert output == "One. Two."
+    user_payload = None
+    for message in client.last_request.messages:
+        if message.role == "user":
+            user_payload = json.loads(message.content)
+            break
+    assert user_payload is not None
+    assert isinstance(user_payload.get("beats"), list)
+    assert user_payload["narrative_policy"]["max_sentences"] == 5
+    assert 1 <= user_payload["narrative_policy"]["target_sentences"] <= 5
+
+
+def test_llm_narrator_enforces_five_sentence_hard_limit():
+    long_text = "S1. S2. S3. S4. S5. S6."
+    client = _FakeClient([LlmResponse(text='{"text":"' + long_text + '"}')])
+    narrator = LlmNarrator(client=client, settings=_settings())
+
+    output = narrator.narrate(
+        [{"type": "room_entered", "room_id": "room_2"}],
+        _session(GameState.EXPLORATION),
+        EngineContext(session_id="n7"),
+    )
+
+    assert output is not None
+    assert "S6." not in output

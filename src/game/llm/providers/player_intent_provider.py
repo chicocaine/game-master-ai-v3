@@ -23,7 +23,7 @@ from game.llm.routing import build_state_summary, prompt_module_for_state
 from game.llm.telemetry import LlmTelemetry
 
 
-PLAYER_INTENT_PROMPT_VERSION = "player_intent.v1"
+PLAYER_INTENT_PROMPT_VERSION = "player_intent.v2"
 
 
 @dataclass(frozen=True)
@@ -65,6 +65,24 @@ class PlayerIntentLlmProvider(ActionProvider):
 
     def pending_count(self) -> int:
         return len(self.queue)
+
+    @staticmethod
+    def _is_underspecified_input(text: str) -> bool:
+        normalized = str(text or "").strip().lower()
+        if not normalized:
+            return True
+        ambiguous_exact = {
+            "?",
+            "idk",
+            "uh",
+            "huh",
+            "maybe",
+        }
+        if normalized in ambiguous_exact:
+            return True
+        if len(normalized.split()) <= 2 and normalized.endswith("?"):
+            return True
+        return False
 
     def _build_request(self, session: Any, user_message: PlayerInputMessage) -> LlmRequest:
         prompt_module = prompt_module_for_state(session.state)
@@ -151,6 +169,33 @@ class PlayerIntentLlmProvider(ActionProvider):
             actor_instance_id=user_message.actor_instance_id,
             raw_input=user_message.text,
             metadata=metadata,
+        )
+
+    def _clarification_converse(self, user_message: PlayerInputMessage) -> Action:
+        message = (
+            "I need a bit more detail to resolve that action. "
+            "Tell me your exact intent, target, or destination."
+        )
+        self._append_timeline(
+            {
+                "kind": "clarification_requested",
+                "actor_instance_id": user_message.actor_instance_id,
+                "player_input": user_message.text,
+            }
+        )
+        if self.telemetry is not None:
+            self.telemetry.emit_fallback("player_intent", PLAYER_INTENT_PROMPT_VERSION, "ambiguous_input")
+
+        return create_action(
+            action_type=ActionType.CONVERSE,
+            parameters={"message": message},
+            actor_instance_id=user_message.actor_instance_id,
+            raw_input=user_message.text,
+            metadata={
+                "provider": "player_intent_llm",
+                "fallback": True,
+                "fallback_reason": "ambiguous_input",
+            },
         )
 
     def _action_from_payload(self, payload: dict[str, Any], user_message: PlayerInputMessage) -> Action:
@@ -251,6 +296,9 @@ class PlayerIntentLlmProvider(ActionProvider):
             return None
 
         user_message = self.queue.popleft()
+        if self._is_underspecified_input(user_message.text):
+            return self._clarification_converse(user_message)
+
         request = self._build_request(session, user_message)
         started = time.perf_counter()
         response_text = ""

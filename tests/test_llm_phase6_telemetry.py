@@ -80,8 +80,10 @@ def test_player_provider_emits_call_and_validation_telemetry_with_prompt_version
 
     assert len(call_events) == 1
     assert call_events[0]["domain"] == "player_intent"
-    assert call_events[0]["prompt_version"] == "player_intent.v1"
+    assert call_events[0]["prompt_version"] == "player_intent.v2"
     assert call_events[0]["success"] is True
+    assert call_events[0]["context_token_estimate"] >= 0
+    assert call_events[0]["beat_count"] == 0
     assert len(validation_events) == 1
     assert validation_events[0]["valid"] is True
 
@@ -170,4 +172,5 @@ def test_converse_responder_emits_prompt_version_telemetry():
     calls = [event for event in sink.events if event.get("kind") == "llm_call"]
     assert len(calls) == 1
     assert calls[0]["domain"] == "converse"
-    assert calls[0]["prompt_version"] == "converse.v1"
+    assert calls[0]["prompt_version"] == "converse.v2"
+    assert calls[0]["context_token_estimate"] >= 0
