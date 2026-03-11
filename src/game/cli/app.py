@@ -31,6 +31,7 @@ def run_cli(
     session_id: str | None = None,
     seed: int = 5,
     debug: bool = False,
+    live_llm: bool = False,
     input_fn: Callable[[str], str] = input,
     output_fn: Callable[[str], None] = print,
 ) -> int:
@@ -40,13 +41,16 @@ def run_cli(
         session_id=session_id,
         seed=seed,
         debug=debug,
+        live_llm=live_llm,
         input_fn=input_fn,
         output_fn=output_fn,
     )
 
     _emit(output_fn, "CLI engine ready.")
+    if runtime.live_llm:
+        _emit(output_fn, "Live LLM mode enabled.")
     _emit(output_fn, f"Session: {runtime.ctx.session_id}")
-    _emit(output_fn, render_help())
+    _emit(output_fn, render_help(live_llm=runtime.live_llm))
     _emit(output_fn, render_state(runtime.session))
 
     while True:
@@ -82,6 +86,21 @@ def run_cli(
                     debug=debug,
                 ),
             )
+
+            if runtime.live_llm and outcome.last_action.type.value == "converse":
+                response = outcome.last_action.metadata.get("converse_response", {})
+                if isinstance(response, dict):
+                    reply = str(response.get("reply", "")).strip()
+                    if reply:
+                        _emit(output_fn, f"game-master-ai[converse] {reply}")
+
+        if runtime.live_llm and runtime.narrator is not None and step_events:
+            try:
+                narration_text = runtime.narrator.narrate(step_events, runtime.session, runtime.ctx)
+            except Exception:
+                narration_text = None
+            if narration_text:
+                _emit(output_fn, f"game-master-ai[narrator] {narration_text}")
 
         if runtime.cli_provider.quit_requested:
             _emit(output_fn, "CLI session ended.")
