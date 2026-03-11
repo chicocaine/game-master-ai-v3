@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 
-from core.enums import ActionType
+from game.core.enums import ActionType
 from game.enums import GameState
 
 

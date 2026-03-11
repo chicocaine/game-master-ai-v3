@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List
 from uuid import uuid4
 
-from core.enums import ActionType
+from game.core.enums import ActionType
 
 
 def _get_str(data: dict, key: str, default: str = "") -> str:

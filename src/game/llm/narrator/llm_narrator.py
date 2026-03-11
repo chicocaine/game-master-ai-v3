@@ -5,7 +5,7 @@ import re
 import time
 from typing import Any, Dict, List, Optional
 
-from core.enums import EventType
+from game.core.enums import EventType
 from game.llm.client import RetryPolicy, invoke_with_retry
 from game.llm.config import LlmSettings
 from game.llm.context_builder import build_context_envelope

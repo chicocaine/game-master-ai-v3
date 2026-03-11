@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 
-from core.enums import EventType
+from game.core.enums import EventType
 
 
 _COMBAT_EVENTS = {

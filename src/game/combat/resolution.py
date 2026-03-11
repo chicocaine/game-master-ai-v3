@@ -4,9 +4,9 @@ from __future__ import annotations
 import math
 from typing import Any, List
 
-from core.action import Action
-from core.action_result import ActionResult
-from core.enums import EventType
+from game.core.action import Action
+from game.core.action_result import ActionResult
+from game.core.enums import EventType
 
 from game.util.dice import roll_dice, roll_save_throw
 from game.enums import AttackType, SpellType, ControlType, DamageType, StatusEffectType

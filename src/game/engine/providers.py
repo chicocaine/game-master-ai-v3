@@ -2,8 +2,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Deque, Optional, TYPE_CHECKING
 
-from core.action import Action, create_action
-from core.enums import ActionType
+from game.core.action import Action, create_action
+from game.core.enums import ActionType
 from game.engine.interfaces import ActionProvider, EngineContext
 from game.enums import GameState
 

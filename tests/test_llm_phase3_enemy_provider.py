@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from types import SimpleNamespace
 
-from core.enums import ActionType
+from game.core.enums import ActionType
 from game.engine.interfaces import EngineContext
 from game.enums import GameState
 from game.llm.config import load_llm_settings

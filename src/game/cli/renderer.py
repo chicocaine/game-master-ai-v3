@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from core.action import Action
-from core.action_result import ActionResult
-from core.enums import ActionType
+from game.core.action import Action
+from game.core.action_result import ActionResult
+from game.core.enums import ActionType
 from game.catalog.models import Catalog
 from game.cli import session_view
 from game.states.game_session import GameSession
@@ -15,7 +15,28 @@ LIFECYCLE_EVENT_TYPES = {
 }
 
 
-def render_help() -> str:
+def render_help(live_llm: bool = False) -> str:
+    if live_llm:
+        return "\n".join(
+            [
+                "Commands:",
+                "Type plain text to drive the LLM loop (player -> parser -> route -> engine -> narration).",
+                "/help",
+                "/state",
+                "/party",
+                "/players",
+                "/dungeons",
+                "/room",
+                "/encounter",
+                "/add <player_template_id>",
+                "/choose <dungeon_id>",
+                "/start",
+                "/save [session_id]",
+                "/load <session_id>",
+                "/quit",
+            ]
+        )
+
     return "\n".join(
         [
             "Commands:",

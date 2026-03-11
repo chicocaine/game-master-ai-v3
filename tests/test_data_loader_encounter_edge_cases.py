@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from core.data_engine.data_loader import DataLoader
-from core.data_engine.json_schema_validator import JsonSchemaValidationError
+from game.data.data_loader import DataLoader
+from game.data.json_schema_validator import JsonSchemaValidationError
 from game.factories.instance_factory import InstanceFactory, SimpleInstanceIdGenerator
 
 

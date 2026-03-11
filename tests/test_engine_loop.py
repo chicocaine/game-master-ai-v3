@@ -1,6 +1,6 @@
-from core.action import create_action
-from core.action_result import ActionResult
-from core.enums import ActionType
+from game.core.action import create_action
+from game.core.action_result import ActionResult
+from game.core.enums import ActionType
 from game.engine.interfaces import EngineContext
 from game.engine.loop import run_engine_loop
 from game.engine.providers import QueueActionProvider, TurnAwareEnemyStubProvider

@@ -1,4 +1,4 @@
-from core.action_result import ActionResult
+from game.core.action_result import ActionResult
 
 
 def test_action_result_success_and_failure_helpers() -> None:

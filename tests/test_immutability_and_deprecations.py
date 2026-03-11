@@ -1,8 +1,8 @@
 from dataclasses import FrozenInstanceError
 import pytest
 
-from core.data_engine import data_loader
-from core.data_engine.data_loader import DataLoader
+from game.data import data_loader
+from game.data.data_loader import DataLoader
 from game.combat.attack import Attack
 from game.combat.spell import Spell
 from game.combat.status_effect import StatusEffect

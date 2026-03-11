@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Protocol, TYPE_CHECKING
 
-from core.action import Action
-from core.action_result import ActionResult
+from game.core.action import Action
+from game.core.action_result import ActionResult
 
 if TYPE_CHECKING:
     from game.states.game_session import GameSession

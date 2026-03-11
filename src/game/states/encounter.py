@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List
 
-from core.action import Action, validate_action
-from core.action_result import ActionResult
-from core.enums import ActionType, EventType
+from game.core.action import Action, validate_action
+from game.core.action_result import ActionResult
+from game.core.enums import ActionType, EventType
 from game.combat.initiative import initiate_encounter
 from game.combat.resolution import calculate_damage_multiplier, resolve_attack_action, resolve_cast_spell_action
 from game.combat.status_effect import merged_damage_affinities_from_effects, tick_and_prune_status_effects

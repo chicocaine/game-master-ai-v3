@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-from core.action import create_action
-from core.enums import ActionType
+from game.core.action import create_action
+from game.core.enums import ActionType
 from game.dungeons.dungeon import Dungeon, Room
 from game.entity.blocks.archetype import Archetype, WeaponConstraints
 from game.entity.blocks.race import Race

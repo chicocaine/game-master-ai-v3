@@ -1,8 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from core.action import create_action
-from core.enums import ActionType
+from game.core.action import create_action
+from game.core.enums import ActionType
 from game.actors.enemy import create_enemy
 from game.combat.attack import Attack
 from game.combat.spell import Spell

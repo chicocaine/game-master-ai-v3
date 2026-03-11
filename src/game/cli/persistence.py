@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from core.action import Action
-from core.action_result import ActionResult
+from game.core.action import Action
+from game.core.action_result import ActionResult
 from game.catalog.models import Catalog
 from game.engine.interfaces import EngineContext, Persistence
 from game.states.game_session import GameSession

@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Set
 
-from core.action import Action, validate_action
-from core.action_result import ActionResult
-from core.enums import ActionType, EventType
+from game.core.action import Action, validate_action
+from game.core.action_result import ActionResult
+from game.core.enums import ActionType, EventType
 
 from game.enums import (
         GameState

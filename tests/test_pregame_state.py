@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-from core.action import create_action
-from core.enums import ActionType
+from game.core.action import create_action
+from game.core.enums import ActionType
 from game.actors.enemy import create_enemy
 from game.catalog.models import Catalog, DungeonTemplate, EncounterTemplate, EnemyTemplate, RoomTemplate
 from game.dungeons.dungeon import Dungeon, Room

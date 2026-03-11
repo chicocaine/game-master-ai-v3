@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 
-from core.action import Action, create_action
-from core.enums import ActionType
+from game.core.action import Action, create_action
+from game.core.enums import ActionType
 from game.cli.parser import CliCommand, parse_cli_input
 from game.cli.persistence import JsonFilePersistence
 from game.cli.renderer import (
@@ -20,6 +20,7 @@ from game.cli.renderer import (
 from game.cli.session_view import current_actor_id
 from game.engine.interfaces import ActionProvider, EngineContext
 from game.enums import GameState, RestType
+from game.llm.providers.player_intent_provider import PlayerIntentLlmProvider
 
 
 OutputFn = Callable[[str], None]
@@ -205,3 +206,72 @@ class InteractiveCliProvider(ActionProvider):
             {key: command.args[0], "target_instance_ids": target_value},
             actor_instance_id=actor_instance_id,
         )
+
+
+@dataclass
+class LiveLlmCliProvider(InteractiveCliProvider):
+    player_provider: PlayerIntentLlmProvider | None = None
+    prompt: str = "gm(llm)> "
+
+    def _active_player_actor_id(self, session) -> str:
+        if session.state is GameState.ENCOUNTER:
+            actor_instance_id = current_actor_id(session)
+            if actor_instance_id.startswith("player_"):
+                return actor_instance_id
+            return ""
+        if session.party:
+            return session.party[0].player_instance_id
+        return "system"
+
+    def next_action(self, session, ctx: EngineContext) -> Action | None:
+        if self.player_provider is None:
+            self.output_fn("Live LLM mode is not configured.")
+            self.quit_requested = True
+            return None
+
+        while True:
+            if self._last_error:
+                self.output_fn(self._last_error)
+                self._last_error = ""
+
+            actor_instance_id = self._active_player_actor_id(session)
+            if session.state is GameState.ENCOUNTER and not actor_instance_id:
+                # Enemy/provider automation should run when this is not a player turn.
+                return None
+
+            try:
+                raw_text = self.input_fn(self.prompt)
+            except EOFError:
+                self.quit_requested = True
+                return None
+
+            command_text = str(raw_text or "").strip()
+            if not command_text:
+                continue
+
+            try:
+                command = parse_cli_input(command_text)
+            except ValueError as exc:
+                self.output_fn(str(exc))
+                continue
+
+            if command is None:
+                continue
+
+            if command.name == "text":
+                self.player_provider.enqueue(
+                    command.args[0],
+                    actor_instance_id=actor_instance_id,
+                    metadata={"source": "cli_live_llm", "session_id": ctx.session_id},
+                )
+                action = self.player_provider.next_action(session, ctx)
+                if action is not None:
+                    return action
+                self.output_fn("The action parser could not resolve that input. Try rephrasing.")
+                continue
+
+            action = self._handle_command(session, ctx, command)
+            if action is not None:
+                return action
+            if self.quit_requested or self.requested_load_session_id is not None:
+                return None

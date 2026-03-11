@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 from uuid import uuid4
 
-from core.enums import EventType
+from game.core.enums import EventType
 
 
 def _get_str(data: dict, key: str, default: str = "") -> str:

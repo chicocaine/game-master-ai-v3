@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, List
 
-from core.action import Action, validate_action
-from core.action_result import ActionResult
-from core.enums import ActionType
+from game.core.action import Action, validate_action
+from game.core.action_result import ActionResult
+from game.core.enums import ActionType
 from game.actors.player import PlayerInstance, create_player_instance
 from game.catalog.models import DungeonTemplate
 from game.runtime.models import DungeonInstance

@@ -4,9 +4,9 @@ import json
 import time
 from typing import Any, Deque, Dict, Optional
 
-from core.action import Action
-from core.action import create_action
-from core.enums import ActionType
+from game.core.action import Action
+from game.core.action import create_action
+from game.core.enums import ActionType
 from game.engine.interfaces import ActionProvider, EngineContext
 from game.enums import GameState
 from game.llm.client import RetryPolicy, invoke_with_retry

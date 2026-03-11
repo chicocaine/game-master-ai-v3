@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import List, Optional
 
-from core.action import Action
-from core.action_result import ActionResult
+from game.core.action import Action
+from game.core.action_result import ActionResult
 from game.enums import GameState
 from game.engine.interfaces import ActionProvider, EngineContext, EventSink, Narrator, Persistence
 from game.states.game_session import GameSession
