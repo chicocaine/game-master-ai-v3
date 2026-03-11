@@ -8,6 +8,30 @@ DEFAULT_IDENTITY_NAME = "game-master-ai"
 DEFAULT_IDENTITY_ALIASES = ["dm", "game master"]
 
 
+def _prune_current_context(current_context: Mapping[str, Any]) -> Dict[str, Any]:
+    context = {str(key): value for key, value in dict(current_context).items()}
+    state = str(context.get("state", "")).strip().lower()
+
+    # Remove obviously empty values from the envelope to keep context compact.
+    compact = {key: value for key, value in context.items() if value not in (None, "", [], {})}
+
+    if state == "pregame":
+        compact.pop("current_room_id", None)
+        compact.pop("current_room_cleared", None)
+        compact.pop("turn_order", None)
+        compact.pop("current_turn_index", None)
+    elif state == "exploration":
+        compact.pop("turn_order", None)
+        compact.pop("current_turn_index", None)
+    elif state == "postgame":
+        compact.pop("current_room_id", None)
+        compact.pop("current_room_cleared", None)
+        compact.pop("turn_order", None)
+        compact.pop("current_turn_index", None)
+
+    return compact
+
+
 def build_past_timeline(
     timeline_entries: Iterable[Mapping[str, Any]],
     max_items: int,
@@ -40,7 +64,7 @@ def build_context_envelope(
                 max_tokens=max_timeline_tokens,
             )
         },
-        "current_context": dict(current_context),
+        "current_context": _prune_current_context(current_context),
         "allowed_actions": [str(action) for action in allowed_actions],
         "actor_context": dict(actor_context),
     }

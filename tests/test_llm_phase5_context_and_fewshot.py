@@ -107,3 +107,24 @@ def test_context_envelope_keeps_required_sections_with_empty_timeline():
     assert envelope["past_context"]["timeline"] == []
     assert envelope["current_context"]["state"] == "pregame"
     assert envelope["allowed_actions"] == ["create_player", "converse"]
+
+
+def test_context_envelope_excludes_stale_sections_for_pregame_state():
+    envelope = build_context_envelope(
+        current_context={
+            "state": "pregame",
+            "party_size": 0,
+            "current_room_id": "room_9",
+            "turn_order": ["player_1", "enemy_1"],
+            "current_turn_index": 1,
+        },
+        allowed_actions=["create_player", "start", "converse"],
+        actor_context={"source": "player"},
+        timeline_entries=[],
+    )
+
+    current_context = envelope["current_context"]
+    assert current_context["state"] == "pregame"
+    assert "current_room_id" not in current_context
+    assert "turn_order" not in current_context
+    assert "current_turn_index" not in current_context
