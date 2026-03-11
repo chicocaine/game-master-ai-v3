@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from core.enums import ActionType
+from game.core.enums import ActionType
 from game.engine.interfaces import EngineContext
 from game.engine.providers import TurnAwareEnemyStubProvider
 from game.enums import GameState
