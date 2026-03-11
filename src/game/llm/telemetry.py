@@ -141,28 +141,30 @@ class LlmTelemetry:
         latency_ms: float,
         response_text: str = "",
         error_type: str = "",
+        error_message: str = "",
     ) -> None:
         metadata = dict(request.metadata or {})
         prompt_version = str(metadata.get("prompt_version", "unknown"))
 
-        self._emit(
-            {
-                "timestamp": _utc_now_iso(),
-                "kind": "llm_call",
-                "domain": domain,
-                "provider": str(metadata.get("provider", "")),
-                "prompt_version": prompt_version,
-                "model": request.model,
-                "success": bool(success),
-                "latency_ms": float(latency_ms),
-                "error_type": error_type,
-                "token_estimate_input": self._input_token_estimate(request),
-                "token_estimate_output": estimate_tokens_from_text(response_text),
-                "context_token_estimate": _extract_context_token_estimate(request),
-                "beat_count": int(metadata.get("beat_count", 0) or 0),
-                "request_metadata": metadata,
-            }
-        )
+        event: Dict[str, Any] = {
+            "timestamp": _utc_now_iso(),
+            "kind": "llm_call",
+            "domain": domain,
+            "provider": str(metadata.get("provider", "")),
+            "prompt_version": prompt_version,
+            "model": request.model,
+            "success": bool(success),
+            "latency_ms": float(latency_ms),
+            "error_type": error_type,
+            "token_estimate_input": self._input_token_estimate(request),
+            "token_estimate_output": estimate_tokens_from_text(response_text),
+            "context_token_estimate": _extract_context_token_estimate(request),
+            "beat_count": int(metadata.get("beat_count", 0) or 0),
+            "request_metadata": metadata,
+        }
+        if error_message:
+            event["error_message"] = str(error_message)
+        self._emit(event)
 
     def emit_validation(
         self,

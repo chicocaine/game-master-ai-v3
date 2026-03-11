@@ -12,7 +12,7 @@ from game.llm.context_builder import build_context_envelope
 from game.llm.context_window import build_recent_window, fit_dict_to_token_budget
 from game.llm.contracts import LlmMessage, LlmRequest
 from game.llm.converse import ConverseResponder
-from game.llm.errors import LlmError
+from game.llm.errors import LlmError, LlmRetryExhaustedError
 from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object, validate_narration_payload
 from game.llm.narrator.beats import build_event_beats, target_sentences_for_beats
@@ -186,6 +186,7 @@ class LlmNarrator:
                 self.telemetry.emit_validation("narration", NARRATION_PROMPT_VERSION, valid=True)
             return bounded_text
         except LlmError as exc:
+            error_msg = str(exc.last_error) if isinstance(exc, LlmRetryExhaustedError) else str(exc)
             if self.telemetry is not None:
                 self.telemetry.emit_call(
                     domain="narration",
@@ -193,6 +194,7 @@ class LlmNarrator:
                     success=False,
                     latency_ms=(time.perf_counter() - started) * 1000.0,
                     error_type=exc.__class__.__name__,
+                    error_message=error_msg,
                 )
                 self.telemetry.emit_validation("narration", NARRATION_PROMPT_VERSION, valid=False, error_type=exc.__class__.__name__)
             return None
@@ -204,6 +206,7 @@ class LlmNarrator:
                     success=False,
                     latency_ms=(time.perf_counter() - started) * 1000.0,
                     error_type=exc.__class__.__name__,
+                    error_message=str(exc),
                 )
                 self.telemetry.emit_validation("narration", NARRATION_PROMPT_VERSION, valid=False, error_type=exc.__class__.__name__)
             return None

@@ -9,7 +9,7 @@ from urllib import error, request
 from game.llm.bootstrap import LlmClients
 from game.llm.config import LlmSettings
 from game.llm.contracts import LlmRequest, LlmResponse
-from game.llm.errors import LlmConfigurationError, LlmTimeoutError, LlmTransportError
+from game.llm.errors import LlmConfigurationError, LlmHttpClientError, LlmTimeoutError, LlmTransportError
 
 
 def _extract_text_from_openai_response(payload: dict[str, Any]) -> str:
@@ -97,8 +97,13 @@ class OpenAiChatCompletionsClient:
             with request.urlopen(req, timeout=timeout_seconds) as resp:
                 raw = resp.read().decode("utf-8")
         except error.HTTPError as exc:
-            payload = exc.read().decode("utf-8", errors="replace") if hasattr(exc, "read") else str(exc)
-            raise LlmTransportError(f"OpenAI HTTP error {exc.code}: {payload}") from exc
+            body = exc.read().decode("utf-8", errors="replace") if hasattr(exc, "read") else str(exc)
+            msg = f"OpenAI HTTP error {exc.code}: {body}"
+            if exc.code == 401 or exc.code == 403:
+                raise LlmConfigurationError(msg) from exc
+            if 400 <= exc.code < 500:
+                raise LlmHttpClientError(msg, status_code=exc.code) from exc
+            raise LlmTransportError(msg) from exc
         except TimeoutError as exc:
             raise LlmTimeoutError(str(exc) or "OpenAI request timed out") from exc
         except error.URLError as exc:

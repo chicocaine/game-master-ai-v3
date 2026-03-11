@@ -14,6 +14,7 @@ from game.llm.context_window import build_recent_window, estimate_tokens, fit_di
 from game.llm.errors import (
     LlmConfigurationError,
     LlmError,
+    LlmHttpClientError,
     LlmResponseParseError,
     LlmRetryExhaustedError,
     LlmSchemaValidationError,
@@ -54,6 +55,7 @@ __all__ = [
     "LlmRequest",
     "LlmResponse",
     "LlmResponseParseError",
+    "LlmHttpClientError",
     "LlmRetryExhaustedError",
     "LlmSchemaValidationError",
     "LlmSettings",

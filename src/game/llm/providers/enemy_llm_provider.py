@@ -12,7 +12,7 @@ from game.llm.client import RetryPolicy, invoke_with_retry
 from game.llm.config import LlmSettings
 from game.llm.context_window import fit_dict_to_token_budget
 from game.llm.contracts import LlmMessage, LlmRequest
-from game.llm.errors import LlmError
+from game.llm.errors import LlmError, LlmRetryExhaustedError
 from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object, validate_action_payload
 from game.llm.prompts import enemy_ai
@@ -204,6 +204,7 @@ class EnemyLlmActionProvider(ActionProvider):
             payload = parse_json_object(response.text)
             action = self._action_from_payload(payload, enemy_id=enemy_id)
         except LlmError as exc:
+            error_msg = str(exc.last_error) if isinstance(exc, LlmRetryExhaustedError) else str(exc)
             if self.telemetry is not None:
                 self.telemetry.emit_call(
                     domain="enemy_ai",
@@ -211,6 +212,7 @@ class EnemyLlmActionProvider(ActionProvider):
                     success=False,
                     latency_ms=(time.perf_counter() - started) * 1000.0,
                     error_type=exc.__class__.__name__,
+                    error_message=error_msg,
                 )
                 self.telemetry.emit_validation(
                     domain="enemy_ai",
@@ -227,6 +229,7 @@ class EnemyLlmActionProvider(ActionProvider):
                     success=False,
                     latency_ms=(time.perf_counter() - started) * 1000.0,
                     error_type=exc.__class__.__name__,
+                    error_message=str(exc),
                 )
                 self.telemetry.emit_validation(
                     domain="enemy_ai",

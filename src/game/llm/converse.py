@@ -9,7 +9,7 @@ from game.llm.config import LlmSettings
 from game.llm.context_builder import build_context_envelope
 from game.llm.context_window import fit_dict_to_token_budget
 from game.llm.contracts import LlmMessage, LlmRequest
-from game.llm.errors import LlmError, LlmSchemaValidationError
+from game.llm.errors import LlmError, LlmRetryExhaustedError, LlmSchemaValidationError
 from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object
 from game.llm.prompts import converse as converse_prompt
@@ -158,6 +158,7 @@ class ConverseResponder:
                 self.telemetry.emit_validation("converse", CONVERSE_PROMPT_VERSION, valid=True)
             return validated
         except LlmError as exc:
+            error_msg = str(exc.last_error) if isinstance(exc, LlmRetryExhaustedError) else str(exc)
             if self.telemetry is not None:
                 self.telemetry.emit_call(
                     domain="converse",
@@ -165,6 +166,7 @@ class ConverseResponder:
                     success=False,
                     latency_ms=(time.perf_counter() - started) * 1000.0,
                     error_type=exc.__class__.__name__,
+                    error_message=error_msg,
                 )
                 self.telemetry.emit_validation("converse", CONVERSE_PROMPT_VERSION, valid=False, error_type=exc.__class__.__name__)
             return None
@@ -176,6 +178,7 @@ class ConverseResponder:
                     success=False,
                     latency_ms=(time.perf_counter() - started) * 1000.0,
                     error_type=exc.__class__.__name__,
+                    error_message=str(exc),
                 )
                 self.telemetry.emit_validation("converse", CONVERSE_PROMPT_VERSION, valid=False, error_type=exc.__class__.__name__)
             return None

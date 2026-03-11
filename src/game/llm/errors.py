@@ -22,6 +22,14 @@ class LlmSchemaValidationError(LlmError):
     """Raised when parsed JSON does not satisfy required payload shape."""
 
 
+class LlmHttpClientError(LlmError):
+    """Raised for deterministic HTTP 4xx responses that must not be retried."""
+
+    def __init__(self, message: str, status_code: int = 0):
+        super().__init__(message)
+        self.status_code = status_code
+
+
 class LlmRetryExhaustedError(LlmError):
     """Raised when all retry attempts are consumed without success."""
 
