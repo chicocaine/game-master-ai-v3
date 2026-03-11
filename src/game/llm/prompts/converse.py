@@ -33,7 +33,11 @@ def build_response_schema() -> Dict[str, Any]:
         "properties": {
             "reply": {"type": "string"},
             "tone": {"type": "string"},
-            "metadata": {"type": "object"},
+            "metadata": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {},
+            },
         },
     }
 

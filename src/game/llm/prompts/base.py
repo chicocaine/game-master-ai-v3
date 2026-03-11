@@ -47,9 +47,41 @@ def build_action_response_schema(allowed_action_values: list[str]) -> Dict[str, 
         "properties": {
             "type": {"type": "string", "enum": list(allowed_action_values)},
             "actor_instance_id": {"type": "string"},
-            "parameters": {"type": "object"},
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    # converse
+                    "message": {"type": "string"},
+                    # create_player / edit_player
+                    "id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "race": {"type": "string"},
+                    "archetype": {"type": "string"},
+                    "weapons": {"type": "array", "items": {"type": "string"}},
+                    # remove_player / edit_player
+                    "player_instance_id": {"type": "string"},
+                    # choose_dungeon
+                    "dungeon": {"type": "string"},
+                    # move
+                    "destination_room_id": {"type": "string"},
+                    # rest
+                    "rest_type": {"type": "string"},
+                    # attack
+                    "attack_id": {"type": "string"},
+                    # cast_spell
+                    "spell_id": {"type": "string"},
+                    # attack / cast_spell
+                    "target_instance_ids": {"type": "array", "items": {"type": "string"}},
+                },
+            },
             "reasoning": {"type": "string"},
-            "metadata": {"type": "object"},
+            "metadata": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {},
+            },
         },
     }
 

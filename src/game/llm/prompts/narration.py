@@ -42,7 +42,11 @@ def build_response_schema() -> Dict[str, Any]:
                 "type": "array",
                 "items": {"type": "string"},
             },
-            "metadata": {"type": "object"},
+            "metadata": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {},
+            },
         },
     }
 

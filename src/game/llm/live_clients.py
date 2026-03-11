@@ -53,7 +53,9 @@ def _normalize_response_format(response_format: dict[str, Any] | None) -> dict[s
         "type": "json_schema",
         "json_schema": {
             "name": "gm_response",
-            "strict": True,
+            # Keep OpenAI schema handling aligned with Python-side jsonschema semantics
+            # where object properties are optional unless explicitly listed in `required`.
+            "strict": False,
             "schema": schema,
         },
     }
