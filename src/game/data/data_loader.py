@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core.data_engine.json_schema_validator import JsonSchemaValidator
+from game.data.json_schema_validator import JsonSchemaValidator
 from game.actors.player import PlayerInstance
 from game.actors.enemy import Enemy
 from game.catalog.models import Catalog, DungeonTemplate, EncounterTemplate, EnemyTemplate, PlayerTemplate, RoomTemplate

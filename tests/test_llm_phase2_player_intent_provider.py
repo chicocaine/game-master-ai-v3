@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from core.enums import ActionType
+from game.core.enums import ActionType
 from game.enums import GameState
 from game.llm.config import load_llm_settings
 from game.llm.contracts import LlmResponse
