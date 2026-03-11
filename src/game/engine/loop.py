@@ -13,6 +13,8 @@ class EngineLoopOutcome:
     session: GameSession
     steps: int
     stopped_reason: str
+    last_action: Action | None = None
+    last_result: ActionResult | None = None
 
 
 def _resolve_next_action(
@@ -78,12 +80,30 @@ def run_engine_loop(
             try:
                 persistence.save_checkpoint(session, action, result, ctx)
             except Exception:
-                return EngineLoopOutcome(session=session, steps=steps, stopped_reason="persistence_failure")
+                return EngineLoopOutcome(
+                    session=session,
+                    steps=steps,
+                    stopped_reason="persistence_failure",
+                    last_action=action,
+                    last_result=result,
+                )
 
         steps += 1
         ctx.turn_index += 1
 
         if session.state is GameState.POSTGAME:
-            return EngineLoopOutcome(session=session, steps=steps, stopped_reason="postgame")
+            return EngineLoopOutcome(
+                session=session,
+                steps=steps,
+                stopped_reason="postgame",
+                last_action=action,
+                last_result=result,
+            )
 
-    return EngineLoopOutcome(session=session, steps=steps, stopped_reason="max_steps")
+    return EngineLoopOutcome(
+        session=session,
+        steps=steps,
+        stopped_reason="max_steps",
+        last_action=action,
+        last_result=result,
+    )

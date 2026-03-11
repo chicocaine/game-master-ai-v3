@@ -5,7 +5,7 @@ from random import Random
 from pathlib import Path
 from typing import Iterable
 
-from core.data_engine.data_loader import load_game_catalog
+from game.data.data_loader import load_game_catalog
 from game.actors.player import PlayerInstance
 from game.catalog.models import Catalog
 from game.enums import GameState

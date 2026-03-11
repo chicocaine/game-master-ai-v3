@@ -1,7 +1,7 @@
 .venv
 .env
 __pycache__
-logs/errors/*.json
-logs/events/*.json
-logs/sessions/*.json
+logs/errors/*
+logs/events/*
+logs/sessions/*
 docs/notes
