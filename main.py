@@ -4,8 +4,12 @@ import argparse
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 
 REPO_ROOT = Path(__file__).resolve().parent
+load_dotenv(REPO_ROOT / ".env")
+
 SRC_DIR = REPO_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
