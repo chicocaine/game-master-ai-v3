@@ -266,6 +266,29 @@ def test_engine_loop_stops_idle_when_no_provider_has_action():
     assert ctx.step_count == 0
 
 
+def test_engine_loop_returns_clean_outcome_for_zero_max_steps():
+    action = create_action(ActionType.CONVERSE, {"message": "noop"}, actor_instance_id="player_1")
+    providers = [QueueActionProvider([action])]
+    session = _StubSession()
+    persistence = _PersistenceRecorder()
+    ctx = EngineContext(session_id="s10")
+
+    outcome = run_engine_loop(
+        session=session,
+        providers=providers,
+        event_sinks=[],
+        narrator=None,
+        persistence=persistence,
+        ctx=ctx,
+        max_steps=0,
+    )
+
+    assert outcome.stopped_reason == "max_steps"
+    assert outcome.steps == 0
+    assert outcome.last_action is None
+    assert outcome.last_result is None
+
+
 def test_engine_loop_handoff_player_then_enemy_stub_provider():
     player_end_turn = create_action(ActionType.END_TURN, {}, actor_instance_id="player_1")
     providers = [QueueActionProvider([player_end_turn]), TurnAwareEnemyStubProvider()]

@@ -60,7 +60,6 @@ def _enemy_template(template_id: str) -> EnemyTemplate:
         race=_race(),
         archetype=_archetype(),
         weapons=[_weapon()],
-        enemy_instance_id="",
     )
     return EnemyTemplate.from_enemy(template_id, enemy)
 

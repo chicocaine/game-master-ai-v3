@@ -3,13 +3,13 @@ from pathlib import Path
 
 import pytest
 
-from game.data.data_loader import DataLoader
+from game.data.data_loader import DataLoader, DataLoaderError
 from game.data.json_schema_validator import JsonSchemaValidationError
 from game.factories.instance_factory import InstanceFactory, SimpleInstanceIdGenerator
 
 
 def _copy_data_dir(tmp_path: Path) -> Path:
-    source_data_dir = Path(__file__).resolve().parents[1] / "data"
+    source_data_dir = Path(__file__).resolve().parents[2] / "data"
     target_data_dir = tmp_path / "data"
     target_data_dir.mkdir()
 
@@ -279,35 +279,17 @@ def test_data_loader_catalog_builds_player_templates_from_players_dataset(tmp_pa
     assert player_seed.player_instance_id == ""
 
 
-def test_data_loader_enemy_templates_ignore_runtime_override_fields_from_json(tmp_path: Path) -> None:
+
+
+def test_data_loader_rejects_missing_status_effect_reference(tmp_path: Path) -> None:
     data_dir = _copy_data_dir(tmp_path)
-    enemies = json.loads((data_dir / "enemies.json").read_text(encoding="utf-8"))
-    assert isinstance(enemies, list)
+    attacks = json.loads((data_dir / "attacks.json").read_text(encoding="utf-8"))
+    assert isinstance(attacks, list)
 
-    goblin = next(item for item in enemies if item.get("id") == "enemy_goblin_skirmisher")
-    goblin["hp"] = 1
-    goblin["max_hp"] = 1
-    goblin["AC"] = 1
-    goblin["base_AC"] = 1
-    goblin["spell_slots"] = 99
-    goblin["max_spell_slots"] = 99
-    goblin["enemy_instance_id"] = "legacy_enemy_instance"
-    goblin["persona"] = "aggressive_brute"
+    attacks[0]["parameters"]["applied_status_effects"] = [
+        {"status_effect_id": "missing_effect", "duration": 1}
+    ]
+    (data_dir / "attacks.json").write_text(json.dumps(attacks, indent=4), encoding="utf-8")
 
-    (data_dir / "enemies.json").write_text(json.dumps(enemies, indent=4), encoding="utf-8")
-
-    catalog = DataLoader(
-        data_dir=data_dir,
-        schema_dir=data_dir / "schemata",
-        validate_schema=False,
-    ).load_catalog()
-    template = catalog.enemy_templates["enemy_goblin_skirmisher"]
-    seed = template.enemy_seed
-    runtime_enemy = template.instantiate_enemy()
-
-    assert seed.enemy_instance_id == ""
-    assert runtime_enemy.enemy_instance_id == ""
-    assert runtime_enemy.persona == "aggressive_brute"
-    assert runtime_enemy.hp > 1
-    assert runtime_enemy.max_hp > 1
-    assert runtime_enemy.AC > 1
+    with pytest.raises(DataLoaderError):
+        DataLoader(data_dir=data_dir, schema_dir=data_dir / "schemata").load_catalog()

@@ -2,7 +2,7 @@ from game.actors.enemy import Enemy
 from game.actors.player import PlayerInstance, create_player_instance
 from game.combat.attack import Attack
 from game.combat.spell import Spell
-from game.dungeons.dungeon import Encounter
+from game.dungeons.dungeon import Dungeon, Encounter, Room
 from game.entity.entity import Entity
 from game.entity.blocks.archetype import Archetype, WeaponConstraints
 from game.entity.blocks.race import Race
@@ -12,6 +12,7 @@ from game.enums import (
     ControlType,
     DamageType,
     DifficultyType,
+    RestType,
     SpellType,
     WeaponDelivery,
     WeaponHandling,
@@ -287,3 +288,58 @@ def test_encounter_enemy_round_trip_and_legacy_id_list() -> None:
     legacy = Encounter.from_dict(legacy_payload)
     assert len(legacy.enemies) == 1
     assert legacy.enemies[0].id == "enemy_legacy"
+
+
+def test_dungeon_round_trip_preserves_allowed_rests_and_connections() -> None:
+    room = Room(
+        id="room_1",
+        name="Start",
+        description="",
+        is_visited=False,
+        is_cleared=False,
+        is_rested=False,
+        connections=["room_2"],
+        encounters=[],
+        allowed_rests=[RestType.SHORT, RestType.LONG],
+    )
+    dungeon = Dungeon(
+        id="dng_1",
+        name="Dungeon",
+        description="",
+        difficulty=DifficultyType.EASY,
+        start_room="room_1",
+        end_room="room_1",
+        rooms=[room],
+    )
+
+    restored = Dungeon.from_dict(dungeon.to_dict())
+
+    assert restored.rooms[0].connections == ["room_2"]
+    assert restored.rooms[0].allowed_rests == [RestType.SHORT, RestType.LONG]
+
+
+def test_room_from_dict_defaults_to_uncleared_when_encounters_present() -> None:
+    payload = {
+        "id": "room_1",
+        "name": "Room",
+        "description": "",
+        "is_visited": False,
+        "is_rested": False,
+        "connections": [],
+        "encounters": [
+            {
+                "id": "enc_1",
+                "name": "Encounter",
+                "description": "",
+                "difficulty": "easy",
+                "cleared": False,
+                "clear_reward": 0,
+                "enemies": [],
+            }
+        ],
+        "allowed_rests": ["short"],
+    }
+
+    room = Room.from_dict(payload)
+
+    assert room.is_cleared is False

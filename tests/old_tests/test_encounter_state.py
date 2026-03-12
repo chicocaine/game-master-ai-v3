@@ -94,7 +94,6 @@ def _encounter() -> Encounter:
         race=_race(),
         archetype=_archetype(),
         weapons=[_weapon()],
-        enemy_instance_id="enemy_inst_1",
     )
     return Encounter(
         id="enc_1",
@@ -136,7 +135,6 @@ def _enemy(instance_id: str, enemy_id: str) -> object:
         race=_race(),
         archetype=_archetype(),
         weapons=[_weapon()],
-        enemy_instance_id=instance_id,
     )
 
 

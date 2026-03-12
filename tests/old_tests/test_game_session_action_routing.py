@@ -96,7 +96,6 @@ def _encounter() -> Encounter:
         race=_race(),
         archetype=_archetype(),
         weapons=[_weapon()],
-        enemy_instance_id="enemy_inst_1",
     )
     return Encounter(
         id="enc_1",
@@ -154,7 +153,6 @@ def _catalog_with_template() -> Catalog:
         race=_race(),
         archetype=_archetype(),
         weapons=[_weapon()],
-        enemy_instance_id="",
     )
     encounter_template = EncounterTemplate(
         id="enc_tpl_1",
@@ -551,7 +549,6 @@ def test_game_session_room_with_multiple_encounters_progresses_until_room_clear(
         race=_race(),
         archetype=_archetype(),
         weapons=[_weapon()],
-        enemy_instance_id="enemy_inst_a",
     )
     second_enemy = create_enemy(
         id="enemy_b",
@@ -560,7 +557,6 @@ def test_game_session_room_with_multiple_encounters_progresses_until_room_clear(
         race=_race(),
         archetype=_archetype(),
         weapons=[_weapon()],
-        enemy_instance_id="enemy_inst_b",
     )
     encounter_1 = Encounter(
         id="enc_1",
@@ -669,7 +665,6 @@ def test_game_session_reused_enemy_id_across_encounters_can_leak_enemy_state() -
         race=_race(),
         archetype=_archetype(),
         weapons=[_weapon()],
-        enemy_instance_id="enemy_inst_shared",
     )
     encounter_1 = Encounter(
         id="enc_1",
@@ -761,7 +756,6 @@ def test_game_session_single_encounter_allows_duplicate_enemy_ids_with_unique_in
         race=_race(),
         archetype=_archetype(),
         weapons=[_weapon()],
-        enemy_instance_id="enemy_inst_1",
     )
     duplicate_enemy_2 = create_enemy(
         id="enemy_dup",
@@ -770,7 +764,6 @@ def test_game_session_single_encounter_allows_duplicate_enemy_ids_with_unique_in
         race=_race(),
         archetype=_archetype(),
         weapons=[_weapon()],
-        enemy_instance_id="enemy_inst_2",
     )
     encounter = Encounter(
         id="enc_dup",

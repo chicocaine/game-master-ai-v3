@@ -173,14 +173,19 @@ def test_handle_action_routes_move_and_rest() -> None:
     assert result.errors and "not allowed" in result.errors[0]
 
 
-def test_handle_action_rejects_invalid_rest_type() -> None:
-    dungeon = _dungeon()
-    session = _session_with_player_and_dungeon(dungeon)
 
-    action = create_action(
-        ActionType.REST,
-        parameters={"rest_type": "nap"},
-        actor_instance_id="player_1",
-    )
-    result = session.exploration.handle_action(session, action)
-    assert result.errors and "Invalid rest type" in result.errors[0]
+
+def test_can_rest_false_when_room_missing_allowed_rests() -> None:
+    state = ExplorationState(current_room=None)
+    assert state.can_rest is False
+
+    state.current_room = SimpleNamespace(allowed_rests=None, is_rested=False)
+    assert state.can_rest is False
+
+
+def test_exploration_state_round_trip_preserves_current_room_id() -> None:
+    state = ExplorationState(current_room=None, current_room_id="room_9")
+    restored = ExplorationState.from_dict(state.to_dict())
+
+    assert restored.current_room is None
+    assert restored.current_room_id == "room_9"

@@ -27,6 +27,8 @@ EMITTED_EVENT_TYPES = {
     EventType.ENCOUNTER_STARTED.value,
     EventType.ENCOUNTER_ENDED.value,
     EventType.INITIATIVE_ROLLED.value,
+    EventType.INITIATIVE_RESULT.value,
+    EventType.DICE_RESULT.value,
     EventType.ATTACK_DECLARED.value,
     EventType.ATTACK_HIT.value,
     EventType.ATTACK_MISSED.value,

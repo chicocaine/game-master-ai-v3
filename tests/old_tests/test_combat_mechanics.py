@@ -27,6 +27,7 @@ from game.enums import (
 )
 from game.states.encounter import EncounterState
 from game.states.pregame import PreGameState
+from game.combat.resolution import _merged_damage_affinities
 
 
 def _race() -> Race:
@@ -94,7 +95,6 @@ def _encounter() -> Encounter:
         race=_race(),
         archetype=_archetype(),
         weapons=[_weapon()],
-        enemy_instance_id="enemy_inst_1",
     )
     return Encounter(
         id="enc_1",
@@ -448,3 +448,99 @@ def test_end_turn_ticks_dot_and_hot_for_all_alive_actors() -> None:
     assert enemy.active_status_effects[0].duration == 1
     assert player.active_status_effects[0].duration == 1
     assert any(event.get("type") == "status_effect_ticked" for event in result.events)
+
+
+def test_attack_hit_result_payload_includes_roll_details() -> None:
+    session, state, _ = _start_encounter()
+
+    attack = Attack(
+        id="atk_hit",
+        name="hit",
+        description="",
+        type=AttackType.MELEE,
+        parameters={"damage_roll": "1d6+0", "hit_modifiers": 2},
+    )
+    session.party[0].known_attacks = [attack]
+    session.party[0].active_status_effects = []
+
+    with patch("game.combat.resolution.roll_save_throw", return_value=12), patch(
+        "game.combat.resolution.roll_dice", return_value=3
+    ):
+        result = _attack(state, session, "atk_hit")
+
+    hit_events = [event for event in result.events if event.get("type") == "attack_hit"]
+    assert hit_events
+    hit_result = hit_events[0].get("hit_result")
+    assert hit_result["base_roll"] == 12
+    assert hit_result["modifier_total"] == 2
+    assert hit_result["roll_total"] == 14
+    assert hit_result["requirement"]["kind"] == "ac"
+    assert hit_result["passed"] is True
+
+
+def test_spell_hit_result_payload_includes_save_dc() -> None:
+    session, state, encounter = _start_encounter()
+
+    spell = Spell(
+        id="spell_save",
+        name="save",
+        description="",
+        type=SpellType.ATTACK,
+        spell_cost=0,
+        parameters={"damage_roll": "1d6+0", "DC": 10},
+    )
+    session.party[0].known_spells = [spell]
+    encounter.enemies[0].initiative_mod = 1
+    encounter.enemies[0].active_status_effects = []
+
+    with patch("game.combat.resolution.roll_save_throw", return_value=5), patch(
+        "game.combat.resolution.roll_dice", return_value=4
+    ):
+        result = _cast_spell(state, session, "spell_save")
+
+    hit_events = [event for event in result.events if event.get("type") == "attack_hit"]
+    assert hit_events
+    hit_result = hit_events[0].get("hit_result")
+    assert hit_result["base_roll"] == 5
+    assert hit_result["modifier_total"] == 1
+    assert hit_result["roll_total"] == 6
+    assert hit_result["requirement"]["kind"] == "save_dc"
+    assert hit_result["requirement"]["target_value"] == 10
+
+
+def test_cleanse_without_filters_removes_all_effects() -> None:
+    session, state, encounter = _start_encounter()
+    target = encounter.enemies[0]
+    target.active_status_effects = [
+        _effect("stun", StatusEffectType.CONTROL, 2, control_type=ControlType.STUNNED),
+        _effect("dot", StatusEffectType.DOT, 2, damage_type=DamageType.FIRE, damage_value=2),
+    ]
+
+    cleanse = Spell(
+        id="cleanse_all",
+        name="cleanse",
+        description="",
+        type=SpellType.CLEANSE,
+        spell_cost=0,
+        parameters={},
+    )
+    session.party[0].known_spells = [cleanse]
+
+    result = _cast_spell(state, session, "cleanse_all")
+
+    assert result.ok is True
+    assert target.active_status_effects == []
+    removed_events = [event for event in result.events if event.get("type") == "status_effect_removed"]
+    assert removed_events
+    assert removed_events[0].get("count") == 2
+
+
+def test_merged_damage_affinities_handles_missing_attributes() -> None:
+    class _Target:
+        pass
+
+    immunities, resistances, vulnerabilities = _merged_damage_affinities(_Target())
+
+    assert immunities == []
+    assert resistances == []
+    assert vulnerabilities == []

@@ -127,7 +127,6 @@ def _session_with_catalog_template_support() -> SimpleNamespace:
         race=race,
         archetype=archetype,
         weapons=[weapon],
-        enemy_instance_id="",
     )
     catalog = Catalog(
         enemy_templates={"enemy_1": EnemyTemplate.from_enemy("enemy_1", base_enemy)},
@@ -448,3 +447,4 @@ def test_handle_action_choose_dungeon_template_object_is_rejected() -> None:
 
     assert result.errors and "was not found" in result.errors[0]
     assert session.dungeon is None
+

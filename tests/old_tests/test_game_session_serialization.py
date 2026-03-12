@@ -63,7 +63,6 @@ def _catalog_with_template() -> Catalog:
         race=_race(),
         archetype=_archetype(),
         weapons=[_weapon()],
-        enemy_instance_id="",
     )
     encounter_template = EncounterTemplate(
         id="enc_tpl_1",
