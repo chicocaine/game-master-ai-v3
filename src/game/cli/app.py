@@ -7,6 +7,7 @@ from game.cli.bootstrap import bootstrap_cli_runtime
 from game.cli.renderer import render_action_feedback, render_encounter, render_help, render_message, render_state
 from game.engine.loop import run_engine_loop
 from game.enums import GameState
+from game.llm.routing import build_state_summary
 
 
 def _emit(output_fn: Callable[[str], None], message: str) -> None:
@@ -88,9 +89,22 @@ def run_cli(
             )
 
             if runtime.live_llm and outcome.last_action.type.value == "converse":
-                response = outcome.last_action.metadata.get("converse_response", {})
-                if isinstance(response, dict):
-                    reply = str(response.get("reply", "")).strip()
+                response_payload = None
+                if runtime.converse_responder is not None:
+                    response_payload = runtime.converse_responder.generate(
+                        player_message=str(outcome.last_action.parameters.get("message", outcome.last_action.raw_input or "")),
+                        state_summary=build_state_summary(runtime.session),
+                        step_count=runtime.ctx.step_count,
+                    )
+                if isinstance(response_payload, dict):
+                    response_metadata = dict(outcome.last_action.metadata)
+                    response_metadata["converse_response"] = {
+                        "reply": str(response_payload.get("reply", "")),
+                        "tone": str(response_payload.get("tone", "")),
+                        "metadata": dict(response_payload.get("metadata", {})),
+                    }
+                    outcome.last_action.metadata = response_metadata
+                    reply = str(response_payload.get("reply", "")).strip()
                     if reply:
                         _emit(output_fn, f"game-master-ai[converse] {reply}")
 
