@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import logging
 from typing import TYPE_CHECKING, Any, Dict, List
 
 from game.core.action import Action, validate_action
@@ -12,6 +13,9 @@ from game.runtime.models import EncounterInstance
 
 if TYPE_CHECKING:
     from game.states.game_session import GameSession
+
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class EncounterState:
@@ -31,13 +35,16 @@ class EncounterState:
 
     @staticmethod
     def _merge_state_changes(base: Dict[str, Any], extra: Dict[str, Any]) -> Dict[str, Any]:
-        merged = dict(base)
-        for key, value in dict(extra).items():
-            if isinstance(value, dict) and isinstance(merged.get(key), dict):
-                merged[key] = {**dict(merged[key]), **dict(value)}
-            else:
-                merged[key] = value
-        return merged
+        def _deep_merge(lhs: Dict[str, Any], rhs: Dict[str, Any]) -> Dict[str, Any]:
+            merged: Dict[str, Any] = dict(lhs)
+            for key, value in dict(rhs).items():
+                if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                    merged[key] = _deep_merge(dict(merged[key]), dict(value))
+                else:
+                    merged[key] = value
+            return merged
+
+        return _deep_merge(dict(base), dict(extra))
 
     @staticmethod
     def _transition(session: "GameSession", target_state: GameState) -> ActionResult:
@@ -152,7 +159,7 @@ class EncounterState:
     def handle_attack(self, session: "GameSession", action: Action) -> ActionResult:
         if self.current_encounter is None:
             return ActionResult.failure(errors=["No active encounter to handle attack."])
-        if action.type is not ActionType.ATTACK:
+        if action.type != ActionType.ATTACK:
             return ActionResult.failure(errors=["Invalid action type for attack handler."])
         validation_result = self._validate_action_turn_owner(action)
         if validation_result.errors:
@@ -162,7 +169,7 @@ class EncounterState:
     def handle_cast_spell(self, session: "GameSession", action: Action) -> ActionResult:
         if self.current_encounter is None:
             return ActionResult.failure(errors=["No active encounter to handle spell cast."])
-        if action.type is not ActionType.CAST_SPELL:
+        if action.type != ActionType.CAST_SPELL:
             return ActionResult.failure(errors=["Invalid action type for cast spell handler."])
         validation_result = self._validate_action_turn_owner(action)
         if validation_result.errors:
@@ -171,7 +178,7 @@ class EncounterState:
 
     def handle_end_turn(self, session: "GameSession", action: Action | None = None) -> ActionResult:
         if action is not None:
-            if action.type is not ActionType.END_TURN:
+            if action.type != ActionType.END_TURN:
                 return ActionResult.failure(errors=["Invalid action type for end turn handler."])
             validation_result = self._validate_action_turn_owner(action)
             if validation_result.errors:
@@ -182,7 +189,7 @@ class EncounterState:
         if action.type not in self.SUPPORTED_ACTIONS:
             return self._unsupported_action(action)
 
-        if action.type is ActionType.ATTACK:
+        if action.type == ActionType.ATTACK:
             result = self.handle_attack(session, action)
             if result.errors:
                 return result
@@ -193,7 +200,7 @@ class EncounterState:
                 events=[*result.events, *turn_result.events],
                 state_changes=self._merge_state_changes(result.state_changes, turn_result.state_changes),
             )
-        if action.type is ActionType.CAST_SPELL:
+        if action.type == ActionType.CAST_SPELL:
             result = self.handle_cast_spell(session, action)
             if result.errors:
                 return result
@@ -204,13 +211,22 @@ class EncounterState:
                 events=[*result.events, *turn_result.events],
                 state_changes=self._merge_state_changes(result.state_changes, turn_result.state_changes),
             )
-        if action.type is ActionType.END_TURN:
+        if action.type == ActionType.END_TURN:
             return self.handle_end_turn(session, action)
         return self._unsupported_action(action)
 
-    @staticmethod
-    def _instance_id(actor: Any) -> str:
-        return str(getattr(actor, "player_instance_id", "") or getattr(actor, "enemy_instance_id", ""))
+    def _instance_id(self, actor: Any) -> str:
+        actor_instance_id = str(getattr(actor, "player_instance_id", "") or getattr(actor, "enemy_instance_id", ""))
+        if not actor_instance_id:
+            logger.warning(
+                "Encounter actor is missing instance id.",
+                extra={
+                    "actor_class": actor.__class__.__name__,
+                    "actor_name": str(getattr(actor, "name", "")),
+                    "encounter_id": str(getattr(self.current_encounter, "id", "")),
+                },
+            )
+        return actor_instance_id
 
     def _all_actors(self, session: "GameSession") -> List[Any]:
         if self.current_encounter is None:
@@ -228,7 +244,7 @@ class EncounterState:
         for effect_instance in getattr(actor, "active_status_effects", []):
             if effect_instance.duration <= 0:
                 continue
-            if effect_instance.status_effect.type is not StatusEffectType.CONTROL:
+            if effect_instance.status_effect.type != StatusEffectType.CONTROL:
                 continue
             if effect_instance.status_effect.control_type in {ControlType.STUNNED, ControlType.ASLEEP}:
                 return True
@@ -240,6 +256,8 @@ class EncounterState:
 
         for actor in [item for item in self._all_actors(session) if getattr(item, "hp", 0) > 0]:
             actor_id = self._instance_id(actor)
+            if not actor_id:
+                continue
             dot_tick_count = 0
             hot_tick_count = 0
 
@@ -248,17 +266,20 @@ class EncounterState:
                     continue
 
                 status_effect = effect_instance.status_effect
-                if status_effect.type is StatusEffectType.DOT:
+                if status_effect.type == StatusEffectType.DOT:
                     dot_tick_count += 1
                     damage_type = status_effect.damage_types[0] if status_effect.damage_types else DamageType.FORCE
                     extra_immunities, extra_resistances, extra_vulnerabilities = merged_damage_affinities_from_effects(
                         getattr(actor, "active_status_effects", [])
                     )
+                    actor_immunities = list(getattr(actor, "merged_immunities", []) or [])
+                    actor_resistances = list(getattr(actor, "merged_resistances", []) or [])
+                    actor_vulnerabilities = list(getattr(actor, "merged_vulnerabilities", []) or [])
                     multiplier = calculate_damage_multiplier(
                         damage_type,
-                        sorted(list(set(actor.merged_immunities + extra_immunities)), key=lambda x: x.value),
-                        sorted(list(set(actor.merged_resistances + extra_resistances)), key=lambda x: x.value),
-                        sorted(list(set(actor.merged_vulnerabilities + extra_vulnerabilities)), key=lambda x: x.value),
+                        sorted(list(set(actor_immunities + extra_immunities)), key=lambda x: x.value),
+                        sorted(list(set(actor_resistances + extra_resistances)), key=lambda x: x.value),
+                        sorted(list(set(actor_vulnerabilities + extra_vulnerabilities)), key=lambda x: x.value),
                     )
                     amount = max(0, int(status_effect.damage_value * multiplier))
                     before = actor.hp
@@ -272,7 +293,7 @@ class EncounterState:
                             "source_id": status_effect.id,
                         }
                     )
-                elif status_effect.type is StatusEffectType.HOT:
+                elif status_effect.type == StatusEffectType.HOT:
                     hot_tick_count += 1
                     before = actor.hp
                     actor.hp = min(getattr(actor, "max_hp", actor.hp), actor.hp + max(0, status_effect.heal_value))
@@ -325,18 +346,18 @@ class EncounterState:
         if not alive_enemies:
             return self.end_encounter(session)
         if not alive_players:
-            if hasattr(session, "transition_to"):
-                return session.transition_to(GameState.POSTGAME)
-            session.state = GameState.POSTGAME
-            return ActionResult.success(state_changes={"state": {"to": GameState.POSTGAME.value}})
+            return self._transition(session, GameState.POSTGAME)
 
-        events: List[dict] = [
-            {
-                "type": EventType.TURN_ENDED.value,
-                "actor_instance_id": self._current_actor_instance_id(),
-                "turn_index": self.current_turn_index,
-            }
-        ]
+        events: List[dict] = []
+        ended_actor_id = self._current_actor_instance_id()
+        if ended_actor_id:
+            events.append(
+                {
+                    "type": EventType.TURN_ENDED.value,
+                    "actor_instance_id": ended_actor_id,
+                    "turn_index": self.current_turn_index,
+                }
+            )
 
         checked = 0
         next_index = self.current_turn_index
@@ -373,20 +394,30 @@ class EncounterState:
         tick_events, tick_changes = self._apply_global_turn_ticks(session)
         events.extend(tick_events)
 
-        if selected_index is not None:
-            self.current_turn_index = selected_index
-            current_actor = self._find_actor(session, self.turn_order[self.current_turn_index])
-            turn_started_event = {
-                "type": EventType.TURN_STARTED.value,
-                "actor_instance_id": self.turn_order[self.current_turn_index],
-                "turn_index": self.current_turn_index,
-            }
-            persona = getattr(current_actor, "persona", "") if current_actor is not None else ""
-            if persona:
-                turn_started_event["persona"] = str(persona)
+        if selected_index is None:
+            fallback_index = (self.current_turn_index + 1) % len(self.turn_order)
+            fallback_actor_id = str(self.turn_order[fallback_index])
             events.append(
-                turn_started_event
+                {
+                    "type": EventType.TURN_SKIPPED.value,
+                    "actor_instance_id": fallback_actor_id,
+                    "reason": "no_eligible_actor_cycle",
+                    "turn_index": fallback_index,
+                }
             )
+            selected_index = fallback_index
+
+        self.current_turn_index = selected_index
+        current_actor = self._find_actor(session, self.turn_order[self.current_turn_index])
+        turn_started_event = {
+            "type": EventType.TURN_STARTED.value,
+            "actor_instance_id": self.turn_order[self.current_turn_index],
+            "turn_index": self.current_turn_index,
+        }
+        persona = getattr(current_actor, "persona", "") if current_actor is not None else ""
+        if persona:
+            turn_started_event["persona"] = str(persona)
+        events.append(turn_started_event)
 
         return ActionResult.success(events=events, state_changes=tick_changes)
 
