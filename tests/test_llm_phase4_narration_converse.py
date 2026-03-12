@@ -80,18 +80,15 @@ def test_llm_narrator_only_triggers_for_triggerable_events():
     assert client.calls == 1
 
 
-def test_llm_narrator_uses_converse_responder_on_converse_event():
+def test_llm_narrator_does_not_trigger_on_converse_event():
     narration_client = _FakeClient([])
-    converse_client = _FakeClient([LlmResponse(text='{"reply":"Stay alert, hero.","tone":"calm"}')])
-    responder = ConverseResponder(client=converse_client, settings=_settings())
-    narrator = LlmNarrator(client=narration_client, settings=_settings(), converse_responder=responder)
+    narrator = LlmNarrator(client=narration_client, settings=_settings())
 
     events = [{"type": "converse", "message": "Any tips?"}]
 
     output = narrator.narrate(events, _session(GameState.EXPLORATION), EngineContext(session_id="n2"))
 
-    assert output == "Stay alert, hero."
-    assert converse_client.calls == 1
+    assert output is None
     assert narration_client.calls == 0
 
 
@@ -109,12 +106,9 @@ def test_llm_narrator_handles_malformed_output_without_raising():
     assert client.calls == 1
 
 
-def test_player_intent_provider_routes_converse_and_keeps_stable_response_shape():
+def test_player_intent_provider_returns_intent_only_converse_action():
     intent_client = _FakeClient([LlmResponse(text='{"type":"converse","parameters":{"message":"hello"}}')])
-    converse_client = _FakeClient([LlmResponse(text='{"reply":"Welcome back.","tone":"friendly","metadata":{"style":"gm"}}')])
-
-    responder = ConverseResponder(client=converse_client, settings=_settings())
-    provider = PlayerIntentLlmProvider(client=intent_client, settings=_settings(), converse_responder=responder)
+    provider = PlayerIntentLlmProvider(client=intent_client, settings=_settings())
     provider.enqueue(text="hello", actor_instance_id="player_1")
 
     action = provider.next_action(_session(GameState.EXPLORATION), EngineContext(session_id="p4"))
@@ -122,16 +116,12 @@ def test_player_intent_provider_routes_converse_and_keeps_stable_response_shape(
     assert action is not None
     assert action.type is ActionType.CONVERSE
     assert action.metadata["provider"] == "player_intent_llm"
-    assert set(action.metadata["converse_response"].keys()) == {"reply", "tone", "metadata"}
-    assert action.metadata["converse_response"]["reply"] == "Welcome back."
+    assert "converse_response" not in action.metadata
 
 
-def test_player_intent_provider_keeps_converse_action_when_responder_fails():
+def test_player_intent_provider_keeps_converse_action_without_responder_coupling():
     intent_client = _FakeClient([LlmResponse(text='{"type":"converse","parameters":{"message":"hello"}}')])
-    converse_client = _FakeClient([LlmResponse(text="invalid")])
-
-    responder = ConverseResponder(client=converse_client, settings=_settings())
-    provider = PlayerIntentLlmProvider(client=intent_client, settings=_settings(), converse_responder=responder)
+    provider = PlayerIntentLlmProvider(client=intent_client, settings=_settings())
     provider.enqueue(text="hello", actor_instance_id="player_1")
 
     action = provider.next_action(_session(GameState.EXPLORATION), EngineContext(session_id="p5"))

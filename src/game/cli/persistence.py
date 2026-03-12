@@ -43,7 +43,8 @@ class JsonFilePersistence(Persistence):
         file_path = self._resolve_file_path(session_id)
         payload = {
             "session_id": session_id,
-            "turn_index": ctx.turn_index,
+            "step_count": ctx.step_count,
+            "turn_index": ctx.step_count,
             "seed": ctx.seed,
             "session": session.to_dict(),
             "last_action": action.to_dict() if action is not None else None,

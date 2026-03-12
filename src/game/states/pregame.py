@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any, List
 
 from game.core.action import Action, validate_action
 from game.core.action_result import ActionResult
-from game.core.enums import ActionType
+from game.core.enums import ActionType, EventType
 from game.actors.player import PlayerInstance, create_player_instance
 from game.catalog.models import DungeonTemplate
 from game.runtime.models import DungeonInstance
@@ -105,7 +105,15 @@ class PreGameState:
         except ValueError as exc:
             return ActionResult.failure(errors=[str(exc)])
         session.party.append(player)
-        return ActionResult.success()
+        return ActionResult.success(
+            events=[
+                {
+                    "type": EventType.PLAYER_CREATED.value,
+                    "player_instance_id": player.player_instance_id,
+                    "name": player.name,
+                }
+            ]
+        )
 
     def handle_remove_player(self, session: "GameSession", player_instance_id: str) -> ActionResult:
         player_index = self._find_player_index(session, player_instance_id)
@@ -113,7 +121,14 @@ class PreGameState:
             return ActionResult.failure(errors=[f"Player '{player_instance_id}' was not found in party."])
         del session.party[player_index]
         self._compact_player_instance_ids(session)
-        return ActionResult.success()
+        return ActionResult.success(
+            events=[
+                {
+                    "type": EventType.PLAYER_REMOVED.value,
+                    "player_instance_id": player_instance_id,
+                }
+            ]
+        )
 
     def handle_edit_player(
         self,
@@ -143,7 +158,15 @@ class PreGameState:
         except ValueError as exc:
             return ActionResult.failure(errors=[str(exc)])
         session.party[player_index] = replacement_player
-        return ActionResult.success()
+        return ActionResult.success(
+            events=[
+                {
+                    "type": EventType.PLAYER_EDITED.value,
+                    "player_instance_id": player_instance_id,
+                    "name": replacement_player.name,
+                }
+            ]
+        )
 
     def handle_choose_dungeon(self, session: "GameSession", dungeon: DungeonInstance) -> ActionResult:
         errors: List[str] = []
@@ -161,7 +184,15 @@ class PreGameState:
             return ActionResult.failure(errors=errors)
 
         session.dungeon = dungeon
-        return ActionResult.success()
+        return ActionResult.success(
+            events=[
+                {
+                    "type": EventType.DUNGEON_CHOSEN.value,
+                    "dungeon_id": str(getattr(dungeon, "id", "")),
+                    "dungeon_name": str(getattr(dungeon, "name", "")),
+                }
+            ]
+        )
 
     def handle_start(self, session: "GameSession") -> ActionResult:
         errors: List[str] = []
@@ -186,7 +217,30 @@ class PreGameState:
         if transition_result.errors:
             return transition_result
         self.started = True
-        return ActionResult.success()
+
+        events = [
+            *transition_result.events,
+            {
+                "type": EventType.GAME_STARTED.value,
+                "party_size": len(session.party),
+                "dungeon_id": str(getattr(session.dungeon, "id", "")),
+            },
+            {
+                "type": EventType.ROOM_ENTERED.value,
+                "room_id": str(getattr(start_room, "id", "")),
+                "room_name": str(getattr(start_room, "name", "")),
+            },
+        ]
+        if not bool(getattr(start_room, "is_visited", False)):
+            events.append(
+                {
+                    "type": EventType.ROOM_EXPLORED.value,
+                    "room_id": str(getattr(start_room, "id", "")),
+                }
+            )
+            start_room.is_visited = True
+
+        return ActionResult.success(events=events, state_changes=dict(transition_result.state_changes))
 
     def handle_action(self, session: "GameSession", action: Action) -> ActionResult:
         if action.type not in self.SUPPORTED_ACTIONS:

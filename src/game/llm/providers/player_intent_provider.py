@@ -11,10 +11,10 @@ from game.engine.interfaces import ActionProvider, EngineContext
 from game.enums import GameState
 from game.llm.client import RetryPolicy, invoke_with_retry
 from game.llm.config import LlmSettings
-from game.llm.converse import ConverseResponder
 from game.llm.context_builder import build_context_envelope
 from game.llm.context_window import fit_dict_to_token_budget
 from game.llm.contracts import LlmMessage, LlmRequest
+from game.llm.debug_context import emit_context
 from game.llm.errors import LlmError, LlmRetryExhaustedError
 from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object, validate_action_payload
@@ -38,7 +38,6 @@ class PlayerIntentLlmProvider(ActionProvider):
     client: Any
     settings: LlmSettings
     retry_policy: RetryPolicy = field(default_factory=lambda: RetryPolicy(max_attempts=2, backoff_seconds=0.0))
-    converse_responder: ConverseResponder | None = None
     telemetry: LlmTelemetry | None = None
     include_provider_metadata: bool = True
     queue: Deque[PlayerInputMessage] = field(default_factory=deque)
@@ -84,7 +83,7 @@ class PlayerIntentLlmProvider(ActionProvider):
             return True
         return False
 
-    def _build_request(self, session: Any, user_message: PlayerInputMessage) -> LlmRequest:
+    def _build_request(self, session: Any, user_message: PlayerInputMessage, step_count: int | None = None) -> LlmRequest:
         prompt_module = prompt_module_for_state(session.state)
         state_summary = build_state_summary(session)
         allowed_actions = self._allowed_action_values(session)
@@ -116,6 +115,15 @@ class PlayerIntentLlmProvider(ActionProvider):
             domain=session.state.value,
             max_examples=4,
             max_tokens=max(64, self.settings.action.max_tokens // 4),
+        )
+
+        emit_context(
+            domain="player_intent",
+            prompt_version=PLAYER_INTENT_PROMPT_VERSION,
+            step_count=step_count,
+            state_summary=state_summary,
+            context_envelope=context_envelope,
+            few_shot_examples=examples,
         )
 
         messages = [
@@ -218,37 +226,6 @@ class PlayerIntentLlmProvider(ActionProvider):
 
         return Action.from_dict(action_data)
 
-    def _route_converse_action(self, action: Action, session: Any, user_message: PlayerInputMessage) -> Action:
-        if action.type is not ActionType.CONVERSE:
-            return action
-        if self.converse_responder is None:
-            return action
-
-        response = self.converse_responder.generate(
-            player_message=str(action.parameters.get("message", user_message.text)),
-            state_summary=build_state_summary(session),
-        )
-        if response is None:
-            return action
-
-        self._append_timeline(
-            {
-                "kind": "llm_converse_output",
-                "actor_instance_id": user_message.actor_instance_id,
-                "reply": str(response.get("reply", "")),
-                "tone": str(response.get("tone", "")),
-            }
-        )
-
-        metadata = dict(action.metadata)
-        metadata["converse_response"] = {
-            "reply": str(response.get("reply", "")),
-            "tone": str(response.get("tone", "")),
-            "metadata": dict(response.get("metadata", {})),
-        }
-        action.metadata = metadata
-        return action
-
     def _blocked_start_converse(self, session: Any, user_message: PlayerInputMessage) -> Optional[Action]:
         if getattr(session, "state", None) is not GameState.PREGAME:
             return None
@@ -296,10 +273,13 @@ class PlayerIntentLlmProvider(ActionProvider):
             return None
 
         user_message = self.queue.popleft()
+        step_count = int(getattr(ctx, "step_count", 0))
         if self._is_underspecified_input(user_message.text):
-            return self._clarification_converse(user_message)
+            action = self._clarification_converse(user_message)
+            self._append_timeline({"kind": "llm_action_parser_output", "step_count": step_count, "type": action.type.value, "parameters": dict(action.parameters)})
+            return action
 
-        request = self._build_request(session, user_message)
+        request = self._build_request(session, user_message, step_count=step_count)
         started = time.perf_counter()
         response_text = ""
 
@@ -369,6 +349,7 @@ class PlayerIntentLlmProvider(ActionProvider):
         self._append_timeline(
             {
                 "kind": "llm_action_parser_output",
+                "step_count": step_count,
                 "actor_instance_id": action.actor_instance_id,
                 "type": action.type.value,
                 "parameters": dict(action.parameters),
@@ -389,4 +370,4 @@ class PlayerIntentLlmProvider(ActionProvider):
                 valid=True,
             )
 
-        return self._route_converse_action(action=action, session=session, user_message=user_message)
+        return action

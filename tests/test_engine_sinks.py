@@ -6,7 +6,7 @@ from game.engine.sinks import InMemoryEventSink, SessionLogSink
 
 def test_in_memory_event_sink_stores_batches_and_flattens():
     sink = InMemoryEventSink()
-    ctx = EngineContext(session_id="sinks", turn_index=3, seed=11)
+    ctx = EngineContext(session_id="sinks", step_count=3, seed=11)
 
     batch_1 = [{"type": "a"}, {"type": "b"}]
     batch_2 = [{"type": "c"}]
@@ -34,7 +34,7 @@ def test_in_memory_event_sink_clear_resets_storage():
 
 def test_session_log_sink_writes_jsonl_events(tmp_path):
     sink = SessionLogSink(base_dir=str(tmp_path / "sessions"))
-    ctx = EngineContext(session_id="session_42", turn_index=7, seed=99)
+    ctx = EngineContext(session_id="session_42", step_count=7, seed=99)
     events = [{"type": "turn_started", "actor_instance_id": "player_1"}]
 
     sink.publish(events, ctx)
@@ -47,6 +47,7 @@ def test_session_log_sink_writes_jsonl_events(tmp_path):
 
     record = json.loads(lines[0])
     assert record["session_id"] == "session_42"
+    assert record["step_count"] == 7
     assert record["turn_index"] == 7
     assert record["seed"] == 99
     assert record["event"] == events[0]
@@ -55,10 +56,10 @@ def test_session_log_sink_writes_jsonl_events(tmp_path):
 
 def test_session_log_sink_appends_multiple_events_and_batches(tmp_path):
     sink = SessionLogSink(base_dir=str(tmp_path / "sessions"))
-    ctx = EngineContext(session_id="session_99", turn_index=1, seed=3)
+    ctx = EngineContext(session_id="session_99", step_count=1, seed=3)
 
     sink.publish([{"type": "a"}, {"type": "b"}], ctx)
-    ctx.turn_index = 2
+    ctx.step_count = 2
     sink.publish([{"type": "c"}], ctx)
 
     output_file = tmp_path / "sessions" / "session_99.jsonl"
@@ -67,4 +68,5 @@ def test_session_log_sink_appends_multiple_events_and_batches(tmp_path):
 
     records = [json.loads(line) for line in lines]
     assert [record["event"]["type"] for record in records] == ["a", "b", "c"]
+    assert [record["step_count"] for record in records] == [1, 1, 2]
     assert [record["turn_index"] for record in records] == [1, 1, 2]

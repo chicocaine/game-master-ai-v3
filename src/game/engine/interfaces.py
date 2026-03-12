@@ -11,8 +11,16 @@ if TYPE_CHECKING:
 @dataclass
 class EngineContext:
     session_id: str
-    turn_index: int = 0
+    step_count: int = 0
     seed: int = 0
+
+    @property
+    def turn_index(self) -> int:
+        return self.step_count
+
+    @turn_index.setter
+    def turn_index(self, value: int) -> None:
+        self.step_count = int(value)
 
 
 class ActionProvider(Protocol):

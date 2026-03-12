@@ -11,7 +11,7 @@ from game.llm.config import LlmSettings
 from game.llm.context_builder import build_context_envelope
 from game.llm.context_window import build_recent_window, fit_dict_to_token_budget
 from game.llm.contracts import LlmMessage, LlmRequest
-from game.llm.converse import ConverseResponder
+from game.llm.debug_context import emit_context
 from game.llm.errors import LlmError, LlmRetryExhaustedError
 from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object, validate_narration_payload
@@ -32,7 +32,6 @@ DEFAULT_NARRATION_TRIGGER_TYPES = {
     EventType.SPELL_CAST.value,
     EventType.ENCOUNTER_ENDED.value,
     EventType.GAME_STARTED.value,
-    EventType.CONVERSE.value,
 }
 
 
@@ -41,7 +40,6 @@ class LlmNarrator:
     client: Any
     settings: LlmSettings
     retry_policy: RetryPolicy = field(default_factory=lambda: RetryPolicy(max_attempts=2, backoff_seconds=0.0))
-    converse_responder: ConverseResponder | None = None
     telemetry: LlmTelemetry | None = None
     trigger_types: set[str] = field(default_factory=lambda: set(DEFAULT_NARRATION_TRIGGER_TYPES))
     timeline: deque = field(default_factory=lambda: deque(maxlen=60))
@@ -73,15 +71,7 @@ class LlmNarrator:
     def should_narrate(self, events: List[Dict[str, Any]]) -> bool:
         return bool(self._event_types(events) & self.trigger_types)
 
-    def _first_converse_message(self, events: List[Dict[str, Any]]) -> str:
-        for event in events:
-            if str(event.get("type", "")) == EventType.CONVERSE.value:
-                message = event.get("message", "")
-                if isinstance(message, str):
-                    return message
-        return ""
-
-    def _narration_request(self, events: List[Dict[str, Any]], session: Any) -> LlmRequest:
+    def _narration_request(self, events: List[Dict[str, Any]], session: Any, step_count: int | None = None) -> LlmRequest:
         recent_events = build_recent_window(
             events,
             max_items=12,
@@ -119,6 +109,15 @@ class LlmNarrator:
             max_tokens=max(64, self.settings.narration.max_tokens // 4),
         )
 
+        emit_context(
+            domain="narration",
+            prompt_version=NARRATION_PROMPT_VERSION,
+            step_count=step_count,
+            state_summary=state_summary,
+            context_envelope=context_envelope,
+            few_shot_examples=examples,
+        )
+
         return LlmRequest(
             model=self.settings.model,
             messages=[
@@ -137,35 +136,15 @@ class LlmNarrator:
             },
         )
 
-    def _generate_converse(self, events: List[Dict[str, Any]], session: Any) -> Optional[str]:
-        if self.converse_responder is None:
-            return None
-
-        player_message = self._first_converse_message(events)
-        if not player_message:
-            return None
-
-        payload = self.converse_responder.generate(
-            player_message=player_message,
-            state_summary=build_state_summary(session),
-        )
-        if payload is None:
-            return None
-        return str(payload.get("reply", "")).strip() or None
-
     def narrate(self, events: List[Dict[str, Any]], session: Any, ctx: Any) -> Optional[str]:
         if not events:
             return None
-        self._append_timeline({"kind": "events", "events": list(events)})
+        step_count = int(getattr(ctx, "step_count", 0))
+        self._append_timeline({"kind": "events", "step_count": step_count, "events": list(events)})
         if not self.should_narrate(events):
             return None
 
-        if EventType.CONVERSE.value in self._event_types(events):
-            converse_reply = self._generate_converse(events, session)
-            if converse_reply:
-                return converse_reply
-
-        request = self._narration_request(events=events, session=session)
+        request = self._narration_request(events=events, session=session, step_count=step_count)
         started = time.perf_counter()
         response_text = ""
         try:
@@ -174,7 +153,7 @@ class LlmNarrator:
             payload = parse_json_object(response.text)
             validated = validate_narration_payload(payload)
             bounded_text = self._limit_sentences(validated["text"], max_sentences=5)
-            self._append_timeline({"kind": "llm_narrator_output", "text": bounded_text})
+            self._append_timeline({"kind": "llm_narrator_output", "step_count": step_count, "text": bounded_text})
             if self.telemetry is not None:
                 self.telemetry.emit_call(
                     domain="narration",

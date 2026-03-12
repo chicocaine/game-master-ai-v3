@@ -15,7 +15,9 @@ _COMBAT_EVENTS = {
 
 _TRANSITION_EVENTS = {
     EventType.GAME_STARTED.value,
+    EventType.ROOM_EXITED.value,
     EventType.ROOM_ENTERED.value,
+    EventType.MOVEMENT_RESOLVED.value,
     EventType.ENCOUNTER_STARTED.value,
     EventType.ENCOUNTER_ENDED.value,
     EventType.GAME_STATE_CHANGED.value,
@@ -52,7 +54,13 @@ def _intensity_for_event(event: Dict[str, Any]) -> int:
         return 3
     if event_type in {EventType.ATTACK_HIT.value, EventType.SPELL_CAST.value, EventType.ENCOUNTER_STARTED.value}:
         return 2
-    if event_type in {EventType.DAMAGE_APPLIED.value, EventType.ATTACK_MISSED.value, EventType.ROOM_ENTERED.value}:
+    if event_type in {
+        EventType.DAMAGE_APPLIED.value,
+        EventType.ATTACK_MISSED.value,
+        EventType.ROOM_ENTERED.value,
+        EventType.ROOM_EXITED.value,
+        EventType.MOVEMENT_RESOLVED.value,
+    }:
         return 1
     return 0
 

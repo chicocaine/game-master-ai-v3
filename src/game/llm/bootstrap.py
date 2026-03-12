@@ -72,7 +72,6 @@ def create_llm_runtime_bundle(
     player_provider = PlayerIntentLlmProvider(
         client=clients.player_intent,
         settings=settings,
-        converse_responder=converse_responder,
         telemetry=telemetry,
     )
 
@@ -85,7 +84,6 @@ def create_llm_runtime_bundle(
     narrator = LlmNarrator(
         client=clients.narration,
         settings=settings,
-        converse_responder=converse_responder,
         telemetry=telemetry,
     )
 

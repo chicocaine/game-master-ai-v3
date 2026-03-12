@@ -1,3 +1,8 @@
+from dataclasses import dataclass
+from types import SimpleNamespace
+
+from game.enums import GameState
+from game.llm.routing import build_state_summary
 from game.llm.context_window import build_recent_window, estimate_tokens, fit_dict_to_token_budget, truncate_text_to_token_budget
 from game.llm.context_builder import build_context_envelope
 from game.llm.fewshot import available_domains, get_few_shot_examples, get_few_shot_examples_with_budget
@@ -128,3 +133,91 @@ def test_context_envelope_excludes_stale_sections_for_pregame_state():
     assert "current_room_id" not in current_context
     assert "turn_order" not in current_context
     assert "current_turn_index" not in current_context
+
+
+@dataclass
+class _SummarySessionStub:
+    state: GameState
+    party: list
+    points: int = 0
+    dungeon: object | None = None
+    available_dungeons: list | None = None
+    exploration: object | None = None
+    encounter: object | None = None
+
+
+def test_build_state_summary_includes_enriched_pregame_and_exploration_fields():
+    dungeon_stub = SimpleNamespace(id="dng_1", name="Forgotten Vault")
+    room_1 = SimpleNamespace(id="room_1", name="Entry", description="A cold archway.", is_cleared=True, connections=["room_2"])
+    room_2 = SimpleNamespace(id="room_2", name="Hall", description="Dusty hall.", is_cleared=False, connections=["room_1"])
+
+    session = _SummarySessionStub(
+        state=GameState.EXPLORATION,
+        party=[object()],
+        dungeon=SimpleNamespace(id="dng_1", name="Forgotten Vault", rooms=[room_1, room_2]),
+        available_dungeons=[dungeon_stub],
+        exploration=SimpleNamespace(current_room=room_1),
+    )
+
+    summary = build_state_summary(session)
+
+    assert summary["dungeon_id"] == "dng_1"
+    assert summary["dungeon_name"] == "Forgotten Vault"
+    assert summary["current_room"]["id"] == "room_1"
+    assert summary["connected_rooms"] == [{"id": "room_2", "name": "Hall"}]
+
+
+def test_build_state_summary_includes_encounter_actor_menus_and_lookup():
+    attack = SimpleNamespace(id="slash", name="Slash", target_type=SimpleNamespace(value="single"))
+    spell = SimpleNamespace(id="arc_bolt", name="Arc Bolt", slot_cost=1, target_type=SimpleNamespace(value="single"))
+    player = SimpleNamespace(
+        player_instance_id="player_1",
+        name="Lyra",
+        description="Swift duelist",
+        hp=10,
+        max_hp=12,
+        merged_attacks=[attack],
+        merged_spells=[spell],
+    )
+    enemy = SimpleNamespace(enemy_instance_id="enemy_1", name="Goblin", description="Sneering", hp=7, max_hp=7)
+    encounter = SimpleNamespace(turn_order=["player_1", "enemy_1"], current_turn_index=0, current_encounter=SimpleNamespace(enemies=[enemy]))
+
+    session = _SummarySessionStub(
+        state=GameState.ENCOUNTER,
+        party=[player],
+        encounter=encounter,
+    )
+
+    summary = build_state_summary(session)
+
+    assert summary["current_actor_instance_id"] == "player_1"
+    assert summary["current_actor_name"] == "Lyra"
+    assert summary["available_attacks"][0]["id"] == "slash"
+    assert summary["available_spells"][0]["id"] == "arc_bolt"
+    assert summary["entity_lookup"]["enemy_1"]["name"] == "Goblin"
+
+
+def test_context_envelope_adds_actor_target_names_from_lookup():
+    envelope = build_context_envelope(
+        current_context={
+            "state": "encounter",
+            "entity_lookup": {
+                "player_1": {"name": "Lyra", "description": "Swift duelist", "role": "player"},
+                "enemy_1": {"name": "Goblin", "description": "Sneering", "role": "enemy"},
+            },
+        },
+        allowed_actions=["attack", "cast_spell", "end_turn", "converse"],
+        actor_context={"source": "player"},
+        timeline_entries=[
+            {
+                "kind": "events",
+                "actor_instance_id": "player_1",
+                "target_instance_id": "enemy_1",
+                "type": "attack_hit",
+            }
+        ],
+    )
+
+    timeline_entry = envelope["past_context"]["timeline"][0]
+    assert timeline_entry["actor_name"] == "Lyra"
+    assert timeline_entry["target_name"] == "Goblin"

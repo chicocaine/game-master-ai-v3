@@ -49,4 +49,20 @@ def few_shot_examples() -> List[Dict[str, Any]]:
             },
         }
     )
+    examples.append(
+        {
+            "input": "Cast fireball on enemy_2",
+            "context_hint": {
+                "available_spells": ["arc_bolt", "healing_word"],
+                "valid_targets": ["enemy_1", "enemy_2"],
+            },
+            "output": {
+                "type": "converse",
+                "parameters": {
+                    "message": "I can't find spell 'fireball' in your current available spells. Choose one listed in available_spells."
+                },
+                "metadata": {"reason": "invalid_menu_selection"},
+            },
+        }
+    )
     return examples

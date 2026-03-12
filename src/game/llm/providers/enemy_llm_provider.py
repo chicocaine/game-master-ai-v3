@@ -10,8 +10,10 @@ from game.engine.interfaces import ActionProvider, EngineContext
 from game.enums import GameState
 from game.llm.client import RetryPolicy, invoke_with_retry
 from game.llm.config import LlmSettings
+from game.llm.context_builder import build_context_envelope
 from game.llm.context_window import fit_dict_to_token_budget
 from game.llm.contracts import LlmMessage, LlmRequest
+from game.llm.debug_context import emit_context
 from game.llm.errors import LlmError, LlmRetryExhaustedError
 from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object, validate_action_payload
@@ -115,11 +117,19 @@ class EnemyLlmActionProvider(ActionProvider):
             metadata=metadata,
         )
 
-    def _build_request(self, enemy_id: str, enemy_persona: str, combat_summary: Dict[str, Any]) -> LlmRequest:
+    def _build_request(self, enemy_id: str, enemy_persona: str, combat_summary: Dict[str, Any], step_count: int | None = None) -> LlmRequest:
         compact_summary = fit_dict_to_token_budget(
             combat_summary,
             max_tokens=max(96, self.settings.enemy.max_tokens // 2),
             priority_keys=["state", "current_enemy_id", "turn_order", "player_targets"],
+        )
+        context_envelope = build_context_envelope(
+            current_context=compact_summary,
+            allowed_actions=["attack", "cast_spell", "end_turn"],
+            actor_context={"actor_instance_id": enemy_id, "source": "enemy_ai"},
+            timeline_entries=[],
+            max_timeline_items=0,
+            max_timeline_tokens=0,
         )
         payload = enemy_ai.build_user_payload(
             actor_instance_id=enemy_id,
@@ -131,6 +141,15 @@ class EnemyLlmActionProvider(ActionProvider):
             domain="enemy_ai",
             max_examples=4,
             max_tokens=max(64, self.settings.enemy.max_tokens // 4),
+        )
+
+        emit_context(
+            domain="enemy_ai",
+            prompt_version=ENEMY_AI_PROMPT_VERSION,
+            step_count=step_count,
+            state_summary=compact_summary,
+            context_envelope=context_envelope,
+            few_shot_examples=examples,
         )
 
         return LlmRequest(
@@ -194,7 +213,12 @@ class EnemyLlmActionProvider(ActionProvider):
         enemy = self._enemy_for_id(session, enemy_id)
         enemy_persona = str(getattr(enemy, "persona", "") or "")
         combat_summary = self._summarize_combat(session, current_enemy_id=enemy_id)
-        request = self._build_request(enemy_id=enemy_id, enemy_persona=enemy_persona, combat_summary=combat_summary)
+        request = self._build_request(
+            enemy_id=enemy_id,
+            enemy_persona=enemy_persona,
+            combat_summary=combat_summary,
+            step_count=int(getattr(ctx, "step_count", 0)),
+        )
         started = time.perf_counter()
         response_text = ""
 

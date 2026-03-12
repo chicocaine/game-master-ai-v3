@@ -89,7 +89,7 @@ def run_engine_loop(
                 )
 
         steps += 1
-        ctx.turn_index += 1
+        ctx.step_count += 1
 
         if session.state is GameState.POSTGAME:
             return EngineLoopOutcome(

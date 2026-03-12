@@ -25,7 +25,8 @@ class SessionLogSink(EventSink):
             for event in events:
                 payload = {
                     "session_id": ctx.session_id,
-                    "turn_index": ctx.turn_index,
+                    "step_count": ctx.step_count,
+                    "turn_index": ctx.step_count,
                     "seed": ctx.seed,
                     "timestamp": datetime.now(UTC).isoformat(),
                     "event": dict(event),

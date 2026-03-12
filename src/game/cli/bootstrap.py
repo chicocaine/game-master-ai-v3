@@ -8,6 +8,7 @@ from uuid import uuid4
 from game.cli.persistence import JsonFilePersistence
 from game.cli.provider import InteractiveCliProvider, LiveLlmCliProvider
 from game.engine.interfaces import EngineContext
+from game.llm.converse import ConverseResponder
 from game.llm.bootstrap import build_provider_chain, create_llm_runtime_bundle
 from game.llm.config import load_llm_settings
 from game.llm.live_clients import create_live_llm_clients
@@ -27,6 +28,7 @@ class CliRuntime:
     step_sink: InMemoryEventSink
     event_sinks: list[object]
     narrator: object | None = None
+    converse_responder: ConverseResponder | None = None
     live_llm: bool = False
 
 
@@ -42,7 +44,7 @@ def bootstrap_cli_runtime(
 ) -> CliRuntime:
     catalog = load_game_catalog(data_dir=data_dir, schema_dir=schema_dir, validate_schema=True)
     session = GameFactory.create_session(catalog=catalog, seed=seed)
-    ctx = EngineContext(session_id=session_id or f"cli_{uuid4().hex[:8]}", turn_index=0, seed=seed)
+    ctx = EngineContext(session_id=session_id or f"cli_{uuid4().hex[:8]}", step_count=0, seed=seed)
     persistence = JsonFilePersistence(catalog=catalog)
     narrator = None
     if live_llm:
@@ -62,6 +64,7 @@ def bootstrap_cli_runtime(
             system_provider=cli_provider,
         )
         narrator = llm_bundle.narrator
+        converse_responder = llm_bundle.converse_responder
     else:
         cli_provider = InteractiveCliProvider(
             input_fn=input_fn,
@@ -70,6 +73,7 @@ def bootstrap_cli_runtime(
             debug=debug,
         )
         providers = [TurnAwareEnemyStubProvider(), cli_provider]
+        converse_responder = None
 
     step_sink = InMemoryEventSink()
     event_sinks = [step_sink, SessionLogSink()]
@@ -82,5 +86,6 @@ def bootstrap_cli_runtime(
         step_sink=step_sink,
         event_sinks=event_sinks,
         narrator=narrator,
+        converse_responder=converse_responder,
         live_llm=live_llm,
     )

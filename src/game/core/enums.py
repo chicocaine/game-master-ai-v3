@@ -44,6 +44,7 @@ class EventType(Enum):
     DUNGEON_CHOSEN = "dungeon_chosen"
 
     ROOM_ENTERED = "room_entered"
+    ROOM_EXITED = "room_exited"
     ROOM_EXPLORED = "room_explored"
     ROOM_CLEARED = "room_cleared"
     MOVEMENT_RESOLVED = "movement_resolved"
@@ -60,6 +61,10 @@ class EventType(Enum):
     ATTACK_MISSED = "attack_missed"
     DAMAGE_APPLIED = "damage_applied"
     SPELL_CAST = "spell_cast"
+    DAMAGE_INEFFECTIVE = "damage_ineffective" # for resist for certain damage_types
+    DAMAGE_EFFECTIVE = "damage_effective" # for vulnerable for certain damage_types
+    DAMAGE_IMMUNE = "damage_immune" # for immunity for certain damage_types
+    CC_IMMUNE = "cc_immune" # for control type status effect immunity
     HEALING_APPLIED = "healing_applied"
     STATUS_EFFECT_APPLIED = "status_effect_applied"
     STATUS_EFFECT_REMOVED = "status_effect_removed"

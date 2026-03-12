@@ -152,7 +152,7 @@ def test_engine_loop_uses_first_provider_with_available_action():
     assert len(sink.batches) == 1
     assert narrator.calls == 1
     assert persistence.calls == 1
-    assert ctx.turn_index == 1
+    assert ctx.step_count == 1
 
 
 def test_engine_loop_continues_when_sink_fails():
@@ -263,7 +263,7 @@ def test_engine_loop_stops_idle_when_no_provider_has_action():
     assert outcome.stopped_reason == "idle"
     assert outcome.steps == 0
     assert persistence.calls == 0
-    assert ctx.turn_index == 0
+    assert ctx.step_count == 0
 
 
 def test_engine_loop_handoff_player_then_enemy_stub_provider():
@@ -290,7 +290,7 @@ def test_engine_loop_handoff_player_then_enemy_stub_provider():
         (ActionType.END_TURN, "enemy_1"),
     ]
     assert persistence.calls == 2
-    assert ctx.turn_index == 2
+    assert ctx.step_count == 2
 
 
 def test_engine_loop_uses_enemy_stub_when_primary_provider_empty_on_enemy_turn():

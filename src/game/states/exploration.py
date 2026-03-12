@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, List
 
 from game.core.action import Action, validate_action
 from game.core.action_result import ActionResult
-from game.core.enums import ActionType
+from game.core.enums import ActionType, EventType
 from game.enums import RestType
 from game.runtime.models import DungeonInstance, RoomInstance
 
@@ -54,9 +54,35 @@ class ExplorationState:
         if target_room is None:
             return ActionResult.failure(errors=["Target room does not exist in the current dungeon."])
 
+        previous_room = self.current_room
+        first_visit = not bool(getattr(target_room, "is_visited", False))
         target_room.is_visited = True
         self.current_room = target_room
-        return ActionResult.success()
+        events = [
+            {
+                "type": EventType.MOVEMENT_RESOLVED.value,
+                "from_room_id": str(getattr(previous_room, "id", "")),
+                "to_room_id": str(getattr(target_room, "id", "")),
+            },
+            {
+                "type": EventType.ROOM_EXITED.value,
+                "room_id": str(getattr(previous_room, "id", "")),
+                "room_name": str(getattr(previous_room, "name", "")),
+            },
+            {
+                "type": EventType.ROOM_ENTERED.value,
+                "room_id": str(getattr(target_room, "id", "")),
+                "room_name": str(getattr(target_room, "name", "")),
+            },
+        ]
+        if first_visit:
+            events.append(
+                {
+                    "type": EventType.ROOM_EXPLORED.value,
+                    "room_id": str(getattr(target_room, "id", "")),
+                }
+            )
+        return ActionResult.success(events=events)
 
     def handle_rest(self, session: "GameSession", rest_type: RestType) -> ActionResult:
         if self.current_room is None:
@@ -68,6 +94,14 @@ class ExplorationState:
         if self.current_room.is_rested:
             return ActionResult.failure(errors=["Current room has already been rested."])
 
+        events = [
+            {
+                "type": EventType.REST_STARTED.value,
+                "room_id": str(getattr(self.current_room, "id", "")),
+                "rest_type": rest_type.value,
+            }
+        ]
+
         for player in session.party:
             if rest_type is RestType.LONG:
                 player.hp = player.max_hp
@@ -77,7 +111,14 @@ class ExplorationState:
                     player.hp = min(player.max_hp, player.hp + max(1, player.max_hp // 2))
                 player.spell_slots = min(player.max_spell_slots, player.spell_slots + max(0, player.max_spell_slots // 2))
         self.current_room.is_rested = True
-        return ActionResult.success()
+        events.append(
+            {
+                "type": EventType.REST_COMPLETED.value,
+                "room_id": str(getattr(self.current_room, "id", "")),
+                "rest_type": rest_type.value,
+            }
+        )
+        return ActionResult.success(events=events)
 
     def handle_action(self, session: "GameSession", action: Action) -> ActionResult:
         if action.type not in self.SUPPORTED_ACTIONS:

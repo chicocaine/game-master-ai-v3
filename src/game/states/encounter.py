@@ -30,6 +30,16 @@ class EncounterState:
         return ActionResult.failure(errors=[f"Unsupported encounter action type: '{action.type.value}'."])
 
     @staticmethod
+    def _merge_state_changes(base: Dict[str, Any], extra: Dict[str, Any]) -> Dict[str, Any]:
+        merged = dict(base)
+        for key, value in dict(extra).items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = {**dict(merged[key]), **dict(value)}
+            else:
+                merged[key] = value
+        return merged
+
+    @staticmethod
     def _transition(session: "GameSession", target_state: GameState) -> ActionResult:
         if hasattr(session, "transition_to"):
             transition_result = session.transition_to(target_state)
@@ -73,7 +83,34 @@ class EncounterState:
         self.current_encounter = encounter
         self.turn_order = initiate_encounter(session, encounter)
         self.current_turn_index = 0
-        return self._transition(session, GameState.ENCOUNTER)
+        transition_result = self._transition(session, GameState.ENCOUNTER)
+        if transition_result.errors:
+            return transition_result
+
+        events = [
+            *transition_result.events,
+            {
+                "type": EventType.INITIATIVE_ROLLED.value,
+                "encounter_id": encounter.id,
+                "turn_order": list(self.turn_order),
+            },
+            {
+                "type": EventType.ENCOUNTER_STARTED.value,
+                "encounter_id": encounter.id,
+                "encounter_name": str(getattr(encounter, "name", "")),
+                "enemy_ids": [str(getattr(enemy, "enemy_instance_id", "")) for enemy in list(encounter.enemies)],
+                "turn_order": list(self.turn_order),
+            },
+        ]
+        current_actor_id = self._current_actor_instance_id()
+        if current_actor_id:
+            events.append(
+                {
+                    "type": EventType.TURN_STARTED.value,
+                    "actor_instance_id": current_actor_id,
+                }
+            )
+        return ActionResult.success(events=events, state_changes=dict(transition_result.state_changes))
 
     def handle_attack(self, session: "GameSession", action: Action) -> ActionResult:
         if self.current_encounter is None:
@@ -109,9 +146,27 @@ class EncounterState:
             return self._unsupported_action(action)
 
         if action.type is ActionType.ATTACK:
-            return self.handle_attack(session, action)
+            result = self.handle_attack(session, action)
+            if result.errors:
+                return result
+            turn_result = self.advance_turn(session)
+            if turn_result.errors:
+                return turn_result
+            return ActionResult.success(
+                events=[*result.events, *turn_result.events],
+                state_changes=self._merge_state_changes(result.state_changes, turn_result.state_changes),
+            )
         if action.type is ActionType.CAST_SPELL:
-            return self.handle_cast_spell(session, action)
+            result = self.handle_cast_spell(session, action)
+            if result.errors:
+                return result
+            turn_result = self.advance_turn(session)
+            if turn_result.errors:
+                return turn_result
+            return ActionResult.success(
+                events=[*result.events, *turn_result.events],
+                state_changes=self._merge_state_changes(result.state_changes, turn_result.state_changes),
+            )
         if action.type is ActionType.END_TURN:
             return self.handle_end_turn(session, action)
         return self._unsupported_action(action)

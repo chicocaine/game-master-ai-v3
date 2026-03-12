@@ -70,6 +70,13 @@ class GameSession:
             )
         self.state = target_state
         return ActionResult.success(
+            events=[
+                {
+                    "type": EventType.GAME_STATE_CHANGED.value,
+                    "from": previous_state.value,
+                    "to": target_state.value,
+                }
+            ],
             state_changes={
                 "state": {
                     "from": previous_state.value,

@@ -113,6 +113,34 @@ def _render_event(event: dict) -> str:
     if event_type == "converse":
         message = str(event.get("message", "")).strip()
         return f"Converse: {message}" if message else "Converse"
+    if event_type == "game_started":
+        return f"Game started (party size: {event.get('party_size', 0)})"
+    if event_type == "game_state_changed":
+        return f"State changed: {event.get('from', '')} -> {event.get('to', '')}"
+    if event_type == "dungeon_chosen":
+        return f"Dungeon chosen: {event.get('dungeon_id', '')}"
+    if event_type == "player_created":
+        return f"Player created: {event.get('player_instance_id', '')}"
+    if event_type == "player_removed":
+        return f"Player removed: {event.get('player_instance_id', '')}"
+    if event_type == "player_edited":
+        return f"Player edited: {event.get('player_instance_id', '')}"
+    if event_type == "movement_resolved":
+        return f"Moved: {event.get('from_room_id', '')} -> {event.get('to_room_id', '')}"
+    if event_type == "room_exited":
+        return f"Room exited: {event.get('room_id', '')}"
+    if event_type == "room_entered":
+        return f"Room entered: {event.get('room_id', '')}"
+    if event_type == "room_explored":
+        return f"Room explored: {event.get('room_id', '')}"
+    if event_type == "rest_started":
+        return f"Rest started: {event.get('rest_type', '')}"
+    if event_type == "rest_completed":
+        return f"Rest completed: {event.get('rest_type', '')}"
+    if event_type == "encounter_started":
+        return f"Encounter started: {event.get('encounter_id', '')}"
+    if event_type == "initiative_rolled":
+        return f"Initiative rolled: {', '.join(event.get('turn_order', []))}"
     if event_type == "turn_started":
         return f"Turn started: {event.get('actor_instance_id', '')}"
     if event_type == "turn_ended":

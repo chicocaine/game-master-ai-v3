@@ -9,6 +9,7 @@ from game.llm.config import LlmSettings
 from game.llm.context_builder import build_context_envelope
 from game.llm.context_window import fit_dict_to_token_budget
 from game.llm.contracts import LlmMessage, LlmRequest
+from game.llm.debug_context import emit_context
 from game.llm.errors import LlmError, LlmRetryExhaustedError, LlmSchemaValidationError
 from game.llm.fewshot import get_few_shot_examples_with_budget
 from game.llm.json_parse import parse_json_object
@@ -44,8 +45,11 @@ class ConverseResponder:
             return ["finish", "converse"]
         return ["converse"]
 
-    def _build_request(self, player_message: str, state_summary: Dict[str, Any]) -> LlmRequest:
-        self._append_timeline({"kind": "player_input", "player_input": str(player_message)})
+    def _build_request(self, player_message: str, state_summary: Dict[str, Any], step_count: int | None = None) -> LlmRequest:
+        timeline_entry = {"kind": "player_input", "player_input": str(player_message)}
+        if step_count is not None:
+            timeline_entry["step_count"] = int(step_count)
+        self._append_timeline(timeline_entry)
         context_envelope = build_context_envelope(
             current_context=state_summary,
             allowed_actions=self._allowed_actions_from_summary(state_summary),
@@ -65,6 +69,15 @@ class ConverseResponder:
             domain="converse",
             max_examples=3,
             max_tokens=max(48, self.settings.conversation.max_tokens // 4),
+        )
+
+        emit_context(
+            domain="converse",
+            prompt_version=CONVERSE_PROMPT_VERSION,
+            step_count=step_count,
+            state_summary=state_summary,
+            context_envelope=context_envelope,
+            few_shot_examples=examples,
         )
 
         return LlmRequest(
@@ -121,8 +134,8 @@ class ConverseResponder:
             return "clarification"
         return "light_roleplay"
 
-    def generate(self, player_message: str, state_summary: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        request = self._build_request(player_message=player_message, state_summary=state_summary)
+    def generate(self, player_message: str, state_summary: Dict[str, Any], step_count: int | None = None) -> Optional[Dict[str, Any]]:
+        request = self._build_request(player_message=player_message, state_summary=state_summary, step_count=step_count)
         started = time.perf_counter()
         response_text = ""
 
@@ -140,13 +153,14 @@ class ConverseResponder:
                     reply=validated["reply"],
                 )
             validated["metadata"] = metadata
-            self._append_timeline(
-                {
-                    "kind": "llm_converse_output",
-                    "reply": validated["reply"],
-                    "tone": validated["tone"],
-                }
-            )
+            output_entry = {
+                "kind": "llm_converse_output",
+                "reply": validated["reply"],
+                "tone": validated["tone"],
+            }
+            if step_count is not None:
+                output_entry["step_count"] = int(step_count)
+            self._append_timeline(output_entry)
             if self.telemetry is not None:
                 self.telemetry.emit_call(
                     domain="converse",
