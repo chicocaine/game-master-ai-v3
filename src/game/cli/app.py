@@ -16,14 +16,6 @@ import json
 
 logger = logging.getLogger(__name__)
 
-_PREGAME_CONVERSE_FALLBACK_TYPES = frozenset({
-    ActionType.CREATE_PLAYER,
-    ActionType.EDIT_PLAYER,
-    ActionType.REMOVE_PLAYER,
-    ActionType.CHOOSE_DUNGEON,
-})
-
-
 def _emit(output_fn: Callable[[str], None], message: str) -> None:
     text = str(message or "").strip()
     if text:
@@ -78,6 +70,72 @@ def _emit_parser_action_debug(output_fn: Callable[[str], None], action) -> None:
 
     _emit(output_fn, concise)
     _emit(output_fn, f"game-master-ai[parser] {json.dumps(payload, ensure_ascii=False)}")
+
+
+def _build_converse_player_message(action) -> str:
+    message = str(getattr(action, "raw_input", "") or "").strip()
+    if message:
+        return message
+    parameters = dict(getattr(action, "parameters", {}) or {})
+    if "message" in parameters:
+        return str(parameters.get("message", "")).strip()
+    return f"Action '{action.type.value}' was resolved."
+
+
+def _build_converse_reasoning(action, result, route_reason: str) -> str:
+    event_types = [str(event.get("type", "")) for event in list(getattr(result, "events", [])) if isinstance(event, dict)]
+    error_summary = "; ".join(list(getattr(result, "errors", [])))
+    parts = [
+        f"route={route_reason}",
+        f"action_type={action.type.value}",
+        f"ok={bool(getattr(result, 'ok', False))}",
+    ]
+    if error_summary:
+        parts.append(f"errors={error_summary}")
+    if event_types:
+        parts.append(f"event_types={','.join(event_types)}")
+    return " | ".join(parts)
+
+
+def _emit_converse_response(runtime, output_fn: Callable[[str], None], action, result, route_reason: str) -> None:
+    if runtime.converse_responder is None:
+        return
+    try:
+        response_payload = runtime.converse_responder.generate(
+            player_message=_build_converse_player_message(action),
+            state_summary=build_state_summary(runtime.session),
+            step_count=runtime.ctx.step_count,
+            parser_reasoning=_build_converse_reasoning(action, result, route_reason=route_reason),
+            parser_metadata={
+                "route_reason": route_reason,
+                "action_type": action.type.value,
+                "action_parameters": dict(getattr(action, "parameters", {}) or {}),
+                "errors": list(getattr(result, "errors", [])),
+                "event_count": len(list(getattr(result, "events", []))),
+                "state": runtime.session.state.value,
+            },
+        )
+    except Exception:
+        logger.exception(
+            "Converse responder failed during post-action routing.",
+            extra={"session_id": runtime.ctx.session_id, "route_reason": route_reason},
+        )
+        return
+
+    if not isinstance(response_payload, dict):
+        return
+
+    response_metadata = dict(getattr(action, "metadata", {}) or {})
+    response_metadata["converse_response"] = {
+        "reply": str(response_payload.get("reply", "")),
+        "reasoning": str(response_payload.get("reasoning", "")),
+        "tone": str(response_payload.get("tone", "")),
+        "metadata": dict(response_payload.get("metadata", {})),
+    }
+    action.metadata = response_metadata
+    reply = str(response_payload.get("reply", "")).strip()
+    if reply:
+        _emit(output_fn, f"game-master-ai[converse] {reply}")
 
 
 def run_cli(
@@ -169,65 +227,35 @@ def run_cli(
                 ),
             )
 
-            if runtime.live_llm and outcome.last_action.type.value == "converse":
-                response_payload = None
-                if runtime.converse_responder is not None:
-                    player_message = str(outcome.last_action.raw_input or outcome.last_action.parameters.get("message", ""))
-                    response_payload = runtime.converse_responder.generate(
-                        player_message=player_message,
-                        state_summary=build_state_summary(runtime.session),
-                        step_count=runtime.ctx.step_count,
-                        parser_reasoning=str(outcome.last_action.reasoning or ""),
-                        parser_metadata=dict(outcome.last_action.metadata),
+            if runtime.live_llm:
+                if outcome.last_action.type == ActionType.CONVERSE:
+                    _emit_converse_response(
+                        runtime,
+                        output_fn,
+                        outcome.last_action,
+                        outcome.last_result,
+                        route_reason="intent_converse",
                     )
-                if isinstance(response_payload, dict):
-                    response_metadata = dict(outcome.last_action.metadata)
-                    response_metadata["converse_response"] = {
-                        "reply": str(response_payload.get("reply", "")),
-                        "reasoning": str(response_payload.get("reasoning", "")),
-                        "tone": str(response_payload.get("tone", "")),
-                        "metadata": dict(response_payload.get("metadata", {})),
-                    }
-                    outcome.last_action.metadata = response_metadata
-                    reply = str(response_payload.get("reply", "")).strip()
-                    if reply:
-                        _emit(output_fn, f"game-master-ai[converse] {reply}")
-            elif (
-                runtime.live_llm
-                and outcome.last_result.errors
-                and runtime.converse_responder is not None
-                and outcome.last_action.type in _PREGAME_CONVERSE_FALLBACK_TYPES
-            ):
-                error_summary = "; ".join(outcome.last_result.errors)
-                response_payload = runtime.converse_responder.generate(
-                    player_message=str(outcome.last_action.raw_input or ""),
-                    state_summary=build_state_summary(runtime.session),
-                    step_count=runtime.ctx.step_count,
-                    parser_reasoning=(
-                        f"Action '{outcome.last_action.type.value}' was rejected by the game engine: {error_summary}"
-                    ),
-                    parser_metadata={
-                        "action_type": outcome.last_action.type.value,
-                        "errors": list(outcome.last_result.errors),
-                        "action_parameters": dict(outcome.last_action.parameters),
-                    },
-                )
-                if isinstance(response_payload, dict):
-                    reply = str(response_payload.get("reply", "")).strip()
-                    if reply:
-                        _emit(output_fn, f"game-master-ai[converse] {reply}")
-
-        if runtime.live_llm and runtime.narrator is not None and step_events:
-            try:
-                narration_text = runtime.narrator.narrate(step_events, runtime.session, runtime.ctx)
-            except Exception:
-                logger.exception(
-                    "Narrator failed for step events.",
-                    extra={"session_id": runtime.ctx.session_id, "step_count": runtime.ctx.step_count},
-                )
-                narration_text = None
-            if narration_text:
-                _emit(output_fn, f"game-master-ai[narrator] {narration_text}")
+                elif runtime.session.state in {GameState.PREGAME, GameState.POSTGAME}:
+                    _emit_converse_response(
+                        runtime,
+                        output_fn,
+                        outcome.last_action,
+                        outcome.last_result,
+                        route_reason="state_route_converse",
+                    )
+                elif runtime.session.state in {GameState.EXPLORATION, GameState.ENCOUNTER}:
+                    if runtime.narrator is not None and step_events:
+                        try:
+                            narration_text = runtime.narrator.narrate(step_events, runtime.session, runtime.ctx)
+                        except Exception:
+                            logger.exception(
+                                "Narrator failed for step events.",
+                                extra={"session_id": runtime.ctx.session_id, "step_count": runtime.ctx.step_count},
+                            )
+                            narration_text = None
+                        if narration_text:
+                            _emit(output_fn, f"game-master-ai[narrator] {narration_text}")
 
         if runtime.cli_provider.quit_requested:
             _emit(output_fn, "CLI session ended.")
