@@ -76,9 +76,11 @@ class GameSession:
             },
         }
 
+    @staticmethod
     def alive_players(players: List[PlayerInstance]) -> List[PlayerInstance]:
         return [player for player in players if player.hp > 0]
-    
+
+    @staticmethod
     def alive_enemies(encounter: EncounterInstance) -> List[Enemy]:
          return [enemy for enemy in encounter.enemies if enemy.hp > 0]
 

@@ -71,8 +71,6 @@ class EncounterState:
             )
         return ActionResult.success()
 
-    # properties of encounter
-
     def start_encounter(self, session: "GameSession", encounter: EncounterInstance) -> ActionResult:
         if encounter is None:
             return ActionResult.failure(errors=["Encounter cannot be None."])
@@ -399,6 +397,7 @@ class EncounterState:
         encounter_id = self.current_encounter.id
         clear_reward = int(getattr(self.current_encounter, "clear_reward", 0))
         session.points = int(getattr(session, "points", 0)) + clear_reward
+        # run a check function to see if all encounters in the room are cleared
         self.current_encounter.cleared = True
 
         status_cleared_events: List[dict] = []
@@ -473,6 +472,3 @@ class EncounterState:
             current_turn_index=int(data.get("current_turn_index", 0)),
             post_encounter_summary=summary,
         )
-
-
-    # serialize and deserialize functions

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from game.core.action import Action, validate_action
 from game.core.action_result import ActionResult
@@ -28,8 +28,6 @@ class ExplorationState:
         if self.current_room is None:
             return False
         return not self.current_room.is_rested and len(self.current_room.allowed_rests) > 0
-
-    # other properties of exploration
 
     @staticmethod
     def _find_room(dungeon: DungeonInstance, room_id: str) -> RoomInstance | None:
@@ -152,5 +150,3 @@ class ExplorationState:
     @classmethod
     def from_dict(cls, data: dict) -> "ExplorationState":
         return cls(current_room=None)
-
-    # serialization and deserialization

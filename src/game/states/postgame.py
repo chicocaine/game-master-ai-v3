@@ -22,11 +22,23 @@ class PostGameState:
     def _unsupported_action(action: Action) -> ActionResult:
         return ActionResult.failure(errors=[f"Unsupported postgame action type: '{action.type.value}'."])
 
+    @staticmethod
+    def _coerce_outcome(value: object) -> GameResult:
+        if isinstance(value, GameResult):
+            return value
+        candidate = getattr(value, "value", value)
+        if candidate is None:
+            return GameResult.ABANDONED
+        normalized = str(candidate).strip()
+        if not normalized:
+            return GameResult.ABANDONED
+        return GameResult(normalized)
+
     def handle_finish(self, session: "GameSession", action: Action | None = None) -> ActionResult:
         if self.outcome is None:
             outcome_value = action.parameters.get("outcome") if action is not None else None
             try:
-                self.outcome = GameResult(str(outcome_value)) if outcome_value else GameResult.ABANDONED
+                self.outcome = self._coerce_outcome(outcome_value)
             except ValueError:
                 return ActionResult.failure(errors=["Invalid postgame outcome value."])
 

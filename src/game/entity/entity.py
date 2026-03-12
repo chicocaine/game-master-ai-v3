@@ -70,13 +70,6 @@ def _parse_archetype(value: Any) -> Archetype:
 		return Archetype.from_dict(value)
 	raise ValueError("Invalid archetype payload.")
 
-def _parse_weapon(value: Any) -> Weapon:
-	if isinstance(value, Weapon):
-		return value
-	if isinstance(value, dict):
-		return Weapon.from_dict(value)
-	raise ValueError("Invalid weapon payload.")
-
 def _parse_weapons(value: Any) -> List[Weapon]:
     if not isinstance(value, list):
         return []

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 MAX_PARTY_SIZE = 4
 
-#wala pa nahuman si pechayco
+# wala pa nahuman si pechayco
 @dataclass
 class PreGameState:
     started: bool = False

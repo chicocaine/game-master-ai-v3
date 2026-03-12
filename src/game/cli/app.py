@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Callable, Sequence
 
@@ -11,6 +12,9 @@ from game.llm.debug_context import should_emit
 from game.llm.routing import build_state_summary
 from game.core.enums import ActionType
 import json
+
+
+logger = logging.getLogger(__name__)
 
 _PREGAME_CONVERSE_FALLBACK_TYPES = frozenset({
     ActionType.CREATE_PLAYER,
@@ -33,6 +37,10 @@ def _publish_runtime_events(runtime, events: list[dict]) -> None:
         try:
             sink.publish(events, runtime.ctx)
         except Exception:
+            logger.exception(
+                "Runtime event sink publish failed; continuing.",
+                extra={"sink": sink.__class__.__name__, "session_id": runtime.ctx.session_id},
+            )
             continue
 
 
@@ -113,13 +121,20 @@ def run_cli(
             try:
                 runtime.persistence.save_manual_snapshot(runtime.session, runtime.ctx)
             except Exception:
-                pass
+                logger.exception(
+                    "Manual snapshot save failed after auto encounter start.",
+                    extra={"session_id": runtime.ctx.session_id},
+                )
             _emit(output_fn, "Encounter started.")
             _emit(output_fn, render_encounter(runtime.session))
             if runtime.live_llm and runtime.narrator is not None and result.events:
                 try:
                     narration_text = runtime.narrator.narrate(result.events, runtime.session, runtime.ctx)
                 except Exception:
+                    logger.exception(
+                        "Narrator failed for encounter-start events.",
+                        extra={"session_id": runtime.ctx.session_id},
+                    )
                     narration_text = None
                 if narration_text:
                     _emit(output_fn, f"game-master-ai[narrator] {narration_text}")
@@ -204,6 +219,10 @@ def run_cli(
             try:
                 narration_text = runtime.narrator.narrate(step_events, runtime.session, runtime.ctx)
             except Exception:
+                logger.exception(
+                    "Narrator failed for step events.",
+                    extra={"session_id": runtime.ctx.session_id, "step_count": runtime.ctx.step_count},
+                )
                 narration_text = None
             if narration_text:
                 _emit(output_fn, f"game-master-ai[narrator] {narration_text}")
