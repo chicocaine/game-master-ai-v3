@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 import math
-from typing import Any, List
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Tuple
 
 from game.core.action import Action
 from game.core.action_result import ActionResult
@@ -21,8 +21,6 @@ from game.combat.status_effect import (
 from game.combat.attack import Attack
 from game.combat.spell import Spell
 from game.runtime.models import EncounterInstance
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from game.states.game_session import GameSession
@@ -47,6 +45,7 @@ def calculate_damage_multiplier(
     if has_vulnerability:
         return 2.0
     return 1.0
+
 
 def _normalize_target_ids(raw: object) -> List[str]:
     if isinstance(raw, str):
@@ -94,7 +93,7 @@ def _has_control_effect(actor: Any, control_type: ControlType) -> bool:
         if effect_instance.duration <= 0:
             continue
         status_effect = effect_instance.status_effect
-        if status_effect.type is StatusEffectType.CONTROL and status_effect.control_type is control_type:
+        if status_effect.type == StatusEffectType.CONTROL and status_effect.control_type == control_type:
             return True
     return False
 
@@ -119,7 +118,7 @@ def _apply_status_effects(target: Any, effects: List[StatusEffectInstance]) -> i
 
 def _can_apply_status_effect(target: Any, effect_instance: StatusEffectInstance) -> bool:
     effect = effect_instance.status_effect
-    if effect.type is not StatusEffectType.CONTROL:
+    if effect.type != StatusEffectType.CONTROL:
         return True
     control_immunities = set(getattr(target, "merged_cc_immunities", []))
     control_immunities.update(merged_control_immunities_from_effects(getattr(target, "active_status_effects", [])))
@@ -142,17 +141,14 @@ def _cleanse_status_effects(target: Any, spell: Spell) -> int:
         if status_effect.type in cleanse_types:
             return True
         if (
-            status_effect.type is StatusEffectType.CONTROL
+            status_effect.type == StatusEffectType.CONTROL
             and status_effect.control_type in cleanse_control_types
         ):
             return True
         return False
 
     if not cleanse_types and not cleanse_control_types:
-        remaining = [
-            effect for effect in active_effects
-            if effect.status_effect.type is not StatusEffectType.CONTROL
-        ]
+        remaining: List[StatusEffectInstance] = []
     else:
         remaining = [effect for effect in active_effects if not _should_remove(effect)]
     removed_count = len(active_effects) - len(remaining)
@@ -186,38 +182,53 @@ def _target_list_for_action(
         targets.append(target)
     return targets, errors
 
-def _damage_amount_for_attack(attack, target) -> int:
-    raw_damage = roll_dice(attack.damage_roll)
-    base_damage = max(0, raw_damage)
-    damage_types = attack.damage_types or [DamageType.FORCE]
-    primary_damage_type = damage_types[0]
-    extra_immunities, extra_resistances, extra_vulnerabilities = merged_damage_affinities_from_effects(
-        getattr(target, "active_status_effects", [])
+
+def _merged_damage_affinities(target: Any) -> Tuple[List[DamageType], List[DamageType], List[DamageType]]:
+    active_effects = getattr(target, "active_status_effects", [])
+    extra_immunities, extra_resistances, extra_vulnerabilities = merged_damage_affinities_from_effects(active_effects)
+    target_immunities = list(getattr(target, "merged_immunities", []) or [])
+    target_resistances = list(getattr(target, "merged_resistances", []) or [])
+    target_vulnerabilities = list(getattr(target, "merged_vulnerabilities", []) or [])
+    return (
+        sorted(list(set(target_immunities + extra_immunities)), key=lambda item: item.value),
+        sorted(list(set(target_resistances + extra_resistances)), key=lambda item: item.value),
+        sorted(list(set(target_vulnerabilities + extra_vulnerabilities)), key=lambda item: item.value),
     )
+
+
+def _damage_amount_for_source(
+    *,
+    target: Any,
+    damage_roll: str,
+    damage_types: List[DamageType],
+) -> int:
+    raw_damage = roll_dice(damage_roll)
+    base_damage = max(0, raw_damage)
+    primary_damage_type = damage_types[0]
+    target_immunities, target_resistances, target_vulnerabilities = _merged_damage_affinities(target)
     multiplier = calculate_damage_multiplier(
         primary_damage_type,
-        sorted(list(set(target.merged_immunities + extra_immunities)), key=lambda x: x.value),
-        sorted(list(set(target.merged_resistances + extra_resistances)), key=lambda x: x.value),
-        sorted(list(set(target.merged_vulnerabilities + extra_vulnerabilities)), key=lambda x: x.value),
+        target_immunities,
+        target_resistances,
+        target_vulnerabilities,
     )
     return max(0, math.floor(base_damage * multiplier))
 
 
-def _damage_amount_for_spell(spell, target) -> int:
-    raw_damage = roll_dice(spell.damage_roll)
-    base_damage = max(0, raw_damage)
-    damage_types = spell.damage_types or [DamageType.FORCE]
-    primary_damage_type = damage_types[0]
-    extra_immunities, extra_resistances, extra_vulnerabilities = merged_damage_affinities_from_effects(
-        getattr(target, "active_status_effects", [])
+def _damage_amount_for_attack(attack: Attack, target: Any) -> int:
+    return _damage_amount_for_source(
+        target=target,
+        damage_roll=attack.damage_roll,
+        damage_types=attack.damage_types or [DamageType.FORCE],
     )
-    multiplier = calculate_damage_multiplier(
-        primary_damage_type,
-        sorted(list(set(target.merged_immunities + extra_immunities)), key=lambda x: x.value),
-        sorted(list(set(target.merged_resistances + extra_resistances)), key=lambda x: x.value),
-        sorted(list(set(target.merged_vulnerabilities + extra_vulnerabilities)), key=lambda x: x.value),
+
+
+def _damage_amount_for_spell(spell: Spell, target: Any) -> int:
+    return _damage_amount_for_source(
+        target=target,
+        damage_roll=spell.damage_roll,
+        damage_types=spell.damage_types or [DamageType.FORCE],
     )
-    return max(0, math.floor(base_damage * multiplier))
 
 def _is_aoe_spell(spell_type: SpellType) -> bool:
     return spell_type in {
@@ -258,7 +269,48 @@ def _heal_amount_for_spell(spell: Spell) -> int:
     return max(0, roll_dice(spell.heal_roll))
 
 
-def _did_hit_target(actor: Any, target: Any, hit_modifiers: int, dc: int) -> bool:
+def _roll_attack_check() -> int:
+    return roll_save_throw()
+
+
+def _roll_save_check() -> int:
+    return roll_save_throw()
+
+
+def _hit_requirement_payload(kind: Literal["ac", "save_dc"], target_value: int) -> Dict[str, Any]:
+    return {
+        "kind": kind,
+        "target_value": int(target_value),
+    }
+
+
+def _build_hit_result_payload(
+    *,
+    base_roll: int,
+    modifier_total: int,
+    requirement_kind: Literal["ac", "save_dc"],
+    requirement_target_value: int,
+    passed: bool,
+) -> Dict[str, Any]:
+    roll_total = int(base_roll + modifier_total)
+    return {
+        "roll_total": roll_total,
+        "base_roll": int(base_roll),
+        "modifier_total": int(modifier_total),
+        "requirement": _hit_requirement_payload(requirement_kind, requirement_target_value),
+        "passed": bool(passed),
+    }
+
+
+def _resolve_hit_result(
+    *,
+    actor: Any,
+    actor_id: str,
+    target: Any,
+    target_id: str,
+    hit_modifiers: int,
+    dc: int,
+) -> tuple[bool, Dict[str, Any], List[dict]]:
     actor_effect_attack_modifier = total_attack_modifier_from_effects(
         getattr(actor, "active_status_effects", [])
     )
@@ -268,14 +320,79 @@ def _did_hit_target(actor: Any, target: Any, hit_modifiers: int, dc: int) -> boo
     effective_target_ac = max(0, getattr(target, "effective_ac", 0) + target_effect_ac_modifier)
 
     if dc > 0:
-        return roll_save_throw() + getattr(target, "initiative_mod", 0) < dc
-    return (
-        roll_save_throw()
-        + hit_modifiers
+        base_roll = _roll_save_check()
+        modifier_total = int(getattr(target, "initiative_mod", 0))
+        roll_total = int(base_roll + modifier_total)
+        passed = roll_total < dc
+        hit_result = _build_hit_result_payload(
+            base_roll=base_roll,
+            modifier_total=modifier_total,
+            requirement_kind="save_dc",
+            requirement_target_value=dc,
+            passed=passed,
+        )
+        events = [
+            {
+                "type": EventType.DICE_ROLLED.value,
+                "roll_context": "save_throw",
+                "actor_instance_id": target_id,
+                "notation": "1d20",
+                "roll": int(base_roll),
+            },
+            {
+                "type": EventType.DICE_RESULT.value,
+                "roll_context": "save_throw",
+                "actor_instance_id": target_id,
+                "base_roll": int(base_roll),
+                "modifier": int(modifier_total),
+                "total": int(roll_total),
+            },
+            {
+                "type": EventType.DC_SAVE_THROW_ROLLED.value,
+                "actor_instance_id": actor_id,
+                "target_instance_id": target_id,
+                "base_roll": int(base_roll),
+                "modifier": int(modifier_total),
+                "total": int(roll_total),
+                "dc": int(dc),
+                "passed": bool(passed),
+            },
+        ]
+        return passed, hit_result, events
+
+    base_roll = _roll_attack_check()
+    modifier_total = int(
+        hit_modifiers
         + getattr(actor, "merged_attack_modifier", 0)
         + actor_effect_attack_modifier
-        >= effective_target_ac
     )
+    roll_total = int(base_roll + modifier_total)
+    passed = roll_total >= effective_target_ac
+    hit_result = _build_hit_result_payload(
+        base_roll=base_roll,
+        modifier_total=modifier_total,
+        requirement_kind="ac",
+        requirement_target_value=effective_target_ac,
+        passed=passed,
+    )
+    events = [
+        {
+            "type": EventType.DICE_ROLLED.value,
+            "roll_context": "attack_roll",
+            "actor_instance_id": actor_id,
+            "notation": "1d20",
+            "roll": int(base_roll),
+        },
+        {
+            "type": EventType.DICE_RESULT.value,
+            "roll_context": "attack_roll",
+            "actor_instance_id": actor_id,
+            "base_roll": int(base_roll),
+            "modifier": int(modifier_total),
+            "total": int(roll_total),
+        },
+    ]
+    return passed, hit_result, events
 
 
 def resolve_attack_action(session: "GameSession", encounter: EncounterInstance, action: Action) -> ActionResult:
@@ -311,12 +428,21 @@ def resolve_attack_action(session: "GameSession", encounter: EncounterInstance, 
 
     for target in targets:
         target_id = _instance_id(target)
-        hit = _did_hit_target(actor, target, attack.hit_modifiers, attack.DC)
+        hit, hit_result, roll_events = _resolve_hit_result(
+            actor=actor,
+            actor_id=action.actor_instance_id,
+            target=target,
+            target_id=target_id,
+            hit_modifiers=attack.hit_modifiers,
+            dc=attack.DC,
+        )
+        events.extend(roll_events)
         events.append({
             "type": EventType.ATTACK_HIT.value if hit else EventType.ATTACK_MISSED.value,
             "actor_instance_id": action.actor_instance_id,
             "target_instance_id": target_id,
             "attack_id": attack.id,
+            "hit_result": hit_result,
         })
         if not hit:
             continue
@@ -428,7 +554,22 @@ def resolve_cast_spell_action(session: "GameSession", encounter: EncounterInstan
                     "source_id": spell.id,
                 })
         else:
-            hit = _did_hit_target(actor, target, spell.hit_modifiers, spell.DC)
+            hit, hit_result, roll_events = _resolve_hit_result(
+                actor=actor,
+                actor_id=action.actor_instance_id,
+                target=target,
+                target_id=target_id,
+                hit_modifiers=spell.hit_modifiers,
+                dc=spell.DC,
+            )
+            events.extend(roll_events)
+            events.append({
+                "type": EventType.ATTACK_HIT.value if hit else EventType.ATTACK_MISSED.value,
+                "actor_instance_id": action.actor_instance_id,
+                "target_instance_id": target_id,
+                "spell_id": spell.id,
+                "hit_result": hit_result,
+            })
             if hit:
                 damage = _damage_amount_for_spell(spell, target)
                 applied_damage = _apply_damage(target, damage)
