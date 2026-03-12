@@ -83,6 +83,7 @@ def _emit_parser_action_debug(output_fn: Callable[[str], None], action) -> None:
 def run_cli(
     data_dir: str | Path = "data",
     schema_dir: str | Path | None = None,
+    persistence_dir: str | Path | None = None,
     session_id: str | None = None,
     seed: int = 5,
     debug: bool = False,
@@ -94,6 +95,7 @@ def run_cli(
         return bootstrap_cli_runtime(
             data_dir=data_dir,
             schema_dir=schema_dir,
+            persistence_dir=persistence_dir,
             session_id=current_session_id,
             seed=seed,
             debug=debug,

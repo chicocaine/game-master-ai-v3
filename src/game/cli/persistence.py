@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Optional
 
 from game.core.action import Action
@@ -50,7 +51,11 @@ class JsonFilePersistence(Persistence):
             "last_action": action.to_dict() if action is not None else None,
             "last_result": result.to_dict() if result is not None else None,
         }
-        file_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
+        snapshot_text = json.dumps(payload, ensure_ascii=False, indent=2)
+        with NamedTemporaryFile("w", encoding="utf-8", dir=str(file_path.parent), delete=False) as handle:
+            handle.write(snapshot_text)
+            temp_path = Path(handle.name)
+        temp_path.replace(file_path)
         return file_path
 
     def save_checkpoint(

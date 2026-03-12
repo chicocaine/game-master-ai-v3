@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -33,7 +33,7 @@ class SessionLogSink(EventSink):
                     "step_count": ctx.step_count,
                     "turn_index": turn_index,
                     "seed": ctx.seed,
-                    "timestamp": datetime.now(UTC).isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "event": dict(event),
                 }
-                handle.write(json.dumps(payload, ensure_ascii=True) + "\n")
+                handle.write(json.dumps(payload, ensure_ascii=False) + "\n")

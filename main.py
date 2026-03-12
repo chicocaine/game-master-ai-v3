@@ -25,6 +25,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=5, help="Seed used for deterministic runtime setup")
     parser.add_argument("--data-dir", default="data", help="Path to game data directory")
     parser.add_argument("--schema-dir", default=None, help="Optional path to JSON schema directory")
+    parser.add_argument(
+        "--persistence-dir",
+        default=None,
+        help="Directory for checkpoint snapshots (overrides GAME_MASTER_AI_PERSISTENCE_DIR).",
+    )
     parser.add_argument("--debug", action="store_true", help="Print extra CLI debug output")
     return parser
 
@@ -38,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     return run_cli(
         data_dir=args.data_dir,
         schema_dir=args.schema_dir,
+        persistence_dir=args.persistence_dir,
         session_id=args.session_id,
         seed=args.seed,
         debug=args.debug,

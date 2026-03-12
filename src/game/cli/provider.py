@@ -109,7 +109,7 @@ class InteractiveCliProvider(ActionProvider):
         if command.name == "save":
             target_session_id = command.args[0] if command.args else ctx.session_id
             file_path = self.persistence.save_manual_snapshot(session, ctx, session_id=target_session_id)
-            self.output_fn(render_message(f"Saved session to {file_path}"))
+            self.output_fn(render_message(f"Saved session to {file_path.resolve()}"))
             return None
         if command.name == "load":
             if not command.args:

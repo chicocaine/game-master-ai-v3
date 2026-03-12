@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Callable
 from uuid import uuid4
@@ -35,6 +36,7 @@ class CliRuntime:
 def bootstrap_cli_runtime(
     data_dir: str | Path = "data",
     schema_dir: str | Path | None = None,
+    persistence_dir: str | Path | None = None,
     session_id: str | None = None,
     seed: int = 5,
     debug: bool = False,
@@ -45,7 +47,11 @@ def bootstrap_cli_runtime(
     catalog = load_game_catalog(data_dir=data_dir, schema_dir=schema_dir, validate_schema=True)
     session = GameFactory.create_session(catalog=catalog, seed=seed)
     ctx = EngineContext(session_id=session_id or f"cli_{uuid4().hex[:8]}", step_count=0, seed=seed)
-    persistence = JsonFilePersistence(catalog=catalog)
+    resolved_persistence_dir = str(
+        persistence_dir
+        or os.getenv("GAME_MASTER_AI_PERSISTENCE_DIR", "logs/checkpoints")
+    )
+    persistence = JsonFilePersistence(base_dir=resolved_persistence_dir, catalog=catalog)
     narrator = None
     if live_llm:
         settings = load_llm_settings(require_api_key=False)
