@@ -73,12 +73,12 @@ class PreGameState:
         if isinstance(value, dict):
             try:
                 return Race.from_dict(value), None
-            except Exception:
+            except (TypeError, ValueError, KeyError):
                 return None, "Invalid race payload."
         if isinstance(value, str):
             race_id = value.strip()
             if not race_id:
-                return None, "Missing required parameter 'race' for action 'create_player'"
+                return None, "Missing required parameter 'race'."
             catalog = getattr(session, "catalog", None)
             race_catalog = getattr(catalog, "races", None)
             if isinstance(race_catalog, dict):
@@ -95,12 +95,12 @@ class PreGameState:
         if isinstance(value, dict):
             try:
                 return Archetype.from_dict(value), None
-            except Exception:
+            except (TypeError, ValueError, KeyError):
                 return None, "Invalid archetype payload."
         if isinstance(value, str):
             archetype_id = value.strip()
             if not archetype_id:
-                return None, "Missing required parameter 'archetype' for action 'create_player'"
+                return None, "Missing required parameter 'archetype'."
             catalog = getattr(session, "catalog", None)
             archetype_catalog = getattr(catalog, "archetypes", None)
             if isinstance(archetype_catalog, dict):
@@ -132,7 +132,7 @@ class PreGameState:
             if isinstance(item, dict):
                 try:
                     resolved_weapons.append(Weapon.from_dict(item))
-                except Exception:
+                except (TypeError, ValueError, KeyError):
                     return None, "Invalid weapon payload."
                 continue
             if isinstance(item, str):
@@ -292,6 +292,7 @@ class PreGameState:
             return ActionResult.failure(errors=["Cannot start game because dungeon start_room is invalid."])
 
         session.exploration.current_room = start_room
+        session.exploration.current_room_id = str(getattr(start_room, "id", ""))
         if hasattr(session, "transition_to"):
             transition_result = session.transition_to(GameState.EXPLORATION)
         else:

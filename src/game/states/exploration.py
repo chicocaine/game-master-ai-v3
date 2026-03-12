@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 @dataclass
 class ExplorationState:
     current_room: RoomInstance | None = None
+    current_room_id: str = ""
     SUPPORTED_ACTIONS = {
         ActionType.MOVE,
         ActionType.REST,
@@ -27,7 +28,22 @@ class ExplorationState:
     def can_rest(self) -> bool:
         if self.current_room is None:
             return False
-        return not self.current_room.is_rested and len(self.current_room.allowed_rests) > 0
+        allowed_rests = list(getattr(self.current_room, "allowed_rests", []) or [])
+        return not bool(getattr(self.current_room, "is_rested", False)) and bool(allowed_rests)
+
+    @staticmethod
+    def _coerce_rest_type(value: object) -> RestType:
+        if isinstance(value, RestType):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip()
+            if not normalized:
+                raise ValueError("Invalid rest type.")
+            try:
+                return RestType(normalized)
+            except ValueError:
+                return RestType[normalized.upper()]
+        raise ValueError("Invalid rest type.")
 
     @staticmethod
     def _find_room(dungeon: DungeonInstance, room_id: str) -> RoomInstance | None:
@@ -56,6 +72,7 @@ class ExplorationState:
         first_visit = not bool(getattr(target_room, "is_visited", False))
         target_room.is_visited = True
         self.current_room = target_room
+        self.current_room_id = str(getattr(target_room, "id", ""))
         events = [
             {
                 "type": EventType.MOVEMENT_RESOLVED.value,
@@ -135,7 +152,7 @@ class ExplorationState:
         if action.type is ActionType.REST:
             rest_type_value = action.parameters.get("rest_type")
             try:
-                rest_type = rest_type_value if isinstance(rest_type_value, RestType) else RestType(str(rest_type_value))
+                rest_type = self._coerce_rest_type(rest_type_value)
             except ValueError:
                 return ActionResult.failure(errors=["Invalid rest type."])
             return self.handle_rest(session, rest_type)
@@ -143,10 +160,12 @@ class ExplorationState:
         return self._unsupported_action(action)
 
     def to_dict(self) -> dict:
+        room_id = self.current_room.id if self.current_room else self.current_room_id
         return {
-            "current_room_id": self.current_room.id if self.current_room else "",
+            "current_room_id": str(room_id or ""),
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "ExplorationState":
-        return cls(current_room=None)
+        room_id = str(data.get("current_room_id", "")) if isinstance(data, dict) else ""
+        return cls(current_room=None, current_room_id=room_id)

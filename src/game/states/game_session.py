@@ -360,10 +360,9 @@ class GameSession:
         session.postgame = PostGameState.from_dict(postgame_data if isinstance(postgame_data, dict) else {})
 
         # Restore runtime pointers in state objects after instances are available.
-        room_id = ""
-        if isinstance(exploration_data, dict):
-            room_id = str(exploration_data.get("current_room_id", ""))
-        session.exploration.current_room = cls._find_room(session.dungeon, room_id)
+        session.exploration.current_room = cls._find_room(session.dungeon, session.exploration.current_room_id)
+        if session.exploration.current_room is not None:
+            session.exploration.current_room_id = str(getattr(session.exploration.current_room, "id", ""))
 
         encounter_id = ""
         if isinstance(encounter_data, dict):
