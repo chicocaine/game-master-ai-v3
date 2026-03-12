@@ -49,7 +49,7 @@ DATASET_LOAD_ORDER = [
 
 
 class DataLoader:
-	"""Load, validate, and hydrate game data from JSON files."""
+	"""Load, and validate game data from JSON files."""
 
 	def __init__(
 		self,
