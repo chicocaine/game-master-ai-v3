@@ -49,6 +49,33 @@ class GameSession:
             id_gen=SimpleInstanceIdGenerator(),
         )
 
+    def reset_for_new_run(self) -> dict:
+        previous_state = self.state
+        self.state = GameState.PREGAME
+        self.party = []
+        self.dungeon = None
+        self.points = 0
+
+        if self.catalog is not None:
+            self.available_dungeons = list(self.catalog.dungeon_templates.values())
+        else:
+            self.available_dungeons = []
+
+        self.pregame = PreGameState()
+        self.exploration = ExplorationState()
+        self.encounter = EncounterState()
+        self.postgame = PostGameState()
+
+        return {
+            "state": {
+                "from": previous_state.value,
+                "to": GameState.PREGAME.value,
+            },
+            "reset": {
+                "fresh_pregame": True,
+            },
+        }
+
     def alive_players(players: List[PlayerInstance]) -> List[PlayerInstance]:
         return [player for player in players if player.hp > 0]
     
@@ -122,13 +149,14 @@ class GameSession:
         )
 
         if action.type is ActionType.CONVERSE:
+            event_message = str(action.parameters.get("message", "") or action.raw_input or "")
             return ActionResult.success(
                 events=[
                     *lifecycle_events,
                     {
                         "type": EventType.CONVERSE.value,
                         "actor_instance_id": action.actor_instance_id,
-                        "message": str(action.parameters.get("message", "")),
+                        "message": event_message,
                         "raw_input": action.raw_input,
                         "metadata": dict(action.metadata),
                     },

@@ -43,7 +43,11 @@ def few_shot_examples() -> List[Dict[str, Any]]:
     examples.append(
         {
             "input": "Finish the run.",
-            "output": {"type": "finish", "parameters": {}},
+            "output": {
+                "type": "finish",
+                "parameters": {},
+                "reasoning": "The player requested to end the session, which maps directly to finish.",
+            },
         }
     )
     return examples

@@ -133,14 +133,20 @@ class MockEchoClient:
     def complete(self, request_payload: LlmRequest) -> LlmResponse:
         _ = request_payload
         if self.domain == "player_intent":
-            return LlmResponse(text='{"type":"converse","parameters":{"message":"I need more detail to act."}}')
+            return LlmResponse(
+                text='{"type":"converse","parameters":{"message":"I need more detail to act."},"reasoning":"The input is conversational and does not include complete parameters for a concrete gameplay action."}'
+            )
         if self.domain == "enemy_ai":
-            return LlmResponse(text='{"type":"end_turn","parameters":{}}')
+            return LlmResponse(text='{"type":"end_turn","parameters":{},"reasoning":"No high-value tactical action is currently available."}')
         if self.domain == "narration":
-            return LlmResponse(text='{"text":"The scene shifts as your choice resolves."}')
+            return LlmResponse(
+                text='{"text":"The scene shifts as your choice resolves.","reasoning":"A short transition beat matches the low-intensity event sequence."}'
+            )
         if self.domain == "converse":
-            return LlmResponse(text='{"reply":"I hear you. Give me one more concrete detail and I will resolve it.","tone":"helpful"}')
-        return LlmResponse(text='{"reply":"..."}')
+            return LlmResponse(
+                text='{"reply":"I hear you. Give me one more concrete detail and I will resolve it.","reasoning":"The parser marked this as a clarification path, so prompting for a specific missing detail is most helpful.","tone":"helpful"}'
+            )
+        return LlmResponse(text='{"reply":"...","reasoning":"Fallback response.","tone":"neutral"}')
 
 
 def create_live_llm_clients(settings: LlmSettings) -> LlmClients:

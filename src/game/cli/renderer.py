@@ -33,6 +33,7 @@ def render_help(live_llm: bool = False) -> str:
                 "/start",
                 "/save [session_id]",
                 "/load <session_id>",
+                "/restart",
                 "/quit",
             ]
         )
@@ -57,6 +58,7 @@ def render_help(live_llm: bool = False) -> str:
             "/end",
             "/save [session_id]",
             "/load <session_id>",
+            "/restart",
             "/quit",
         ]
     )
@@ -141,6 +143,19 @@ def _render_event(event: dict) -> str:
         return f"Encounter started: {event.get('encounter_id', '')}"
     if event_type == "initiative_rolled":
         return f"Initiative rolled: {', '.join(event.get('turn_order', []))}"
+    if event_type == "initiative_result":
+        return (
+            "Initiative result: "
+            + ", ".join(event.get("turn_order", []))
+            + f" (current: {event.get('current_actor_instance_id', '')})"
+        )
+    if event_type == "dice_rolled":
+        return f"Dice rolled ({event.get('roll_context', '')}): {event.get('actor_instance_id', '')} -> {event.get('roll', 0)}"
+    if event_type == "dice_result":
+        return (
+            f"Dice result ({event.get('roll_context', '')}): {event.get('actor_instance_id', '')} "
+            f"= {event.get('base_roll', 0)} + {event.get('modifier', 0)} => {event.get('total', 0)}"
+        )
     if event_type == "turn_started":
         return f"Turn started: {event.get('actor_instance_id', '')}"
     if event_type == "turn_ended":

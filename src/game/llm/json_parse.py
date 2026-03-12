@@ -102,6 +102,7 @@ def validate_action_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 def validate_narration_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     text = _require_non_empty_string(payload, "text")
+    reasoning = _require_non_empty_string(payload, "reasoning")
     style = _optional_string(payload, "style").strip()
     metadata = _optional_object(payload, "metadata")
 
@@ -119,6 +120,7 @@ def validate_narration_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
 
     return {
         "text": text,
+        "reasoning": reasoning,
         "style": style,
         "focus_event_ids": focus_event_ids,
         "metadata": metadata,

@@ -5,6 +5,7 @@ def system_instructions() -> str:
     return (
         "You are a dungeon master narration generator. "
         "Return one JSON object with atmospheric but concise narration for the provided events and beats. "
+        "Include a non-empty reasoning field explaining why the narration focus and tone fit the events. "
         "Narration length must be between 1 and 5 sentences inclusive. "
         "Vary sentence count based on beat count and intensity guidance in narrative_policy. "
         "Do not include markdown."
@@ -33,10 +34,11 @@ def build_user_payload(
 def build_response_schema() -> Dict[str, Any]:
     return {
         "type": "object",
-        "required": ["text"],
+        "required": ["text", "reasoning"],
         "additionalProperties": False,
         "properties": {
             "text": {"type": "string"},
+            "reasoning": {"type": "string"},
             "style": {"type": "string"},
             "focus_event_ids": {
                 "type": "array",
@@ -59,6 +61,7 @@ def few_shot_examples() -> List[Dict[str, Any]]:
             },
             "output": {
                 "text": "The party steps into room_2, where stale air and distant echoes signal danger ahead.",
+                "reasoning": "A room-entered transition beat calls for atmospheric scene-setting with forward tension.",
                 "style": "atmospheric",
             },
         }

@@ -43,7 +43,11 @@ def few_shot_examples() -> List[Dict[str, Any]]:
     examples.append(
         {
             "input": "Move to room_2",
-            "output": {"type": "move", "parameters": {"destination_room_id": "room_2"}},
+            "output": {
+                "type": "move",
+                "parameters": {"destination_room_id": "room_2"},
+                "reasoning": "The player provided a clear destination, satisfying move action requirements.",
+            },
         }
     )
     return examples

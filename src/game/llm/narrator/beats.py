@@ -3,31 +3,92 @@ from typing import Any, Dict, List
 from game.core.enums import EventType
 
 
-_COMBAT_EVENTS = {
-    EventType.ATTACK_DECLARED.value,
-    EventType.ATTACK_HIT.value,
-    EventType.ATTACK_MISSED.value,
-    EventType.DAMAGE_APPLIED.value,
-    EventType.SPELL_CAST.value,
-    EventType.DEATH.value,
-    EventType.REVIVE.value,
+_EVENT_CATEGORIES: Dict[str, str] = {
+    EventType.GAME_STARTED.value: "transition",
+    EventType.GAME_FINISHED.value: "transition",
+    EventType.GAME_STATE_CHANGED.value: "transition",
+    EventType.TURN_STARTED.value: "combat",
+    EventType.TURN_ENDED.value: "combat",
+    EventType.TURN_SKIPPED.value: "combat",
+    EventType.NARRATION.value: "system",
+    EventType.CONVERSE.value: "converse",
+    EventType.SYSTEM_MESSAGE.value: "system",
+    EventType.PLAYER_MESSAGE.value: "converse",
+    EventType.ERROR.value: "system",
+    EventType.ACTION_SUBMITTED.value: "system",
+    EventType.ACTION_VALIDATED.value: "system",
+    EventType.ACTION_REJECTED.value: "system",
+    EventType.ACTION_RESOLVED.value: "system",
+    EventType.PLAYER_CREATED.value: "transition",
+    EventType.PLAYER_REMOVED.value: "transition",
+    EventType.PLAYER_EDITED.value: "transition",
+    EventType.DUNGEON_CHOSEN.value: "transition",
+    EventType.ROOM_ENTERED.value: "transition",
+    EventType.ROOM_EXITED.value: "transition",
+    EventType.ROOM_EXPLORED.value: "transition",
+    EventType.ROOM_CLEARED.value: "transition",
+    EventType.MOVEMENT_RESOLVED.value: "transition",
+    EventType.REST_STARTED.value: "recovery",
+    EventType.REST_COMPLETED.value: "recovery",
+    EventType.ENCOUNTER_STARTED.value: "transition",
+    EventType.ENCOUNTER_ENDED.value: "transition",
+    EventType.DICE_ROLLED.value: "combat",
+    EventType.DICE_RESULT.value: "combat",
+    EventType.INITIATIVE_ROLLED.value: "combat",
+    EventType.INITIATIVE_RESULT.value: "combat",
+    EventType.DC_SAVE_THROW_ROLLED.value: "combat",
+    EventType.ATTACK_DECLARED.value: "combat",
+    EventType.ATTACK_HIT.value: "combat",
+    EventType.ATTACK_MISSED.value: "combat",
+    EventType.DAMAGE_APPLIED.value: "combat",
+    EventType.SPELL_CAST.value: "combat",
+    EventType.DAMAGE_INEFFECTIVE.value: "combat",
+    EventType.DAMAGE_EFFECTIVE.value: "combat",
+    EventType.DAMAGE_IMMUNE.value: "combat",
+    EventType.CC_IMMUNE.value: "combat",
+    EventType.HEALING_APPLIED.value: "recovery",
+    EventType.STATUS_EFFECT_APPLIED.value: "combat",
+    EventType.STATUS_EFFECT_REMOVED.value: "recovery",
+    EventType.STATUS_EFFECT_TICKED.value: "combat",
+    EventType.DEATH.value: "combat",
+    EventType.REVIVE.value: "recovery",
+    EventType.HP_UPDATED.value: "system",
+    EventType.SPELL_COUNT_UPDATED.value: "system",
+    EventType.AC_UPDATED.value: "system",
+    EventType.STATS_UPDATED.value: "system",
+    EventType.REWARD_GRANTED.value: "transition",
+    EventType.PROGRESSION_UPDATED.value: "transition",
 }
 
-_TRANSITION_EVENTS = {
-    EventType.GAME_STARTED.value,
-    EventType.ROOM_EXITED.value,
-    EventType.ROOM_ENTERED.value,
-    EventType.MOVEMENT_RESOLVED.value,
-    EventType.ENCOUNTER_STARTED.value,
-    EventType.ENCOUNTER_ENDED.value,
-    EventType.GAME_STATE_CHANGED.value,
-}
 
-_RECOVERY_EVENTS = {
-    EventType.REST_STARTED.value,
-    EventType.REST_COMPLETED.value,
-    EventType.HEALING_APPLIED.value,
-    EventType.STATUS_EFFECT_REMOVED.value,
+_EVENT_INTENSITY: Dict[str, int] = {
+    EventType.GAME_FINISHED.value: 3,
+    EventType.DEATH.value: 3,
+    EventType.REVIVE.value: 3,
+    EventType.ENCOUNTER_STARTED.value: 2,
+    EventType.ENCOUNTER_ENDED.value: 2,
+    EventType.INITIATIVE_RESULT.value: 2,
+    EventType.ATTACK_HIT.value: 2,
+    EventType.SPELL_CAST.value: 2,
+    EventType.DAMAGE_EFFECTIVE.value: 2,
+    EventType.DAMAGE_IMMUNE.value: 2,
+    EventType.CC_IMMUNE.value: 2,
+    EventType.DAMAGE_APPLIED.value: 1,
+    EventType.ATTACK_MISSED.value: 1,
+    EventType.ATTACK_DECLARED.value: 1,
+    EventType.INITIATIVE_ROLLED.value: 1,
+    EventType.DICE_ROLLED.value: 1,
+    EventType.DICE_RESULT.value: 1,
+    EventType.DC_SAVE_THROW_ROLLED.value: 1,
+    EventType.ROOM_ENTERED.value: 1,
+    EventType.ROOM_EXITED.value: 1,
+    EventType.ROOM_EXPLORED.value: 1,
+    EventType.MOVEMENT_RESOLVED.value: 1,
+    EventType.HEALING_APPLIED.value: 1,
+    EventType.STATUS_EFFECT_APPLIED.value: 1,
+    EventType.STATUS_EFFECT_REMOVED.value: 1,
+    EventType.STATUS_EFFECT_TICKED.value: 1,
+    EventType.REWARD_GRANTED.value: 1,
 }
 
 
@@ -37,32 +98,12 @@ def _event_type(event: Dict[str, Any]) -> str:
 
 def _category_for_event(event: Dict[str, Any]) -> str:
     event_type = _event_type(event)
-    if event_type in _COMBAT_EVENTS:
-        return "combat"
-    if event_type in _TRANSITION_EVENTS:
-        return "transition"
-    if event_type in _RECOVERY_EVENTS:
-        return "recovery"
-    if event_type == EventType.CONVERSE.value:
-        return "converse"
-    return "system"
+    return _EVENT_CATEGORIES.get(event_type, "system")
 
 
 def _intensity_for_event(event: Dict[str, Any]) -> int:
     event_type = _event_type(event)
-    if event_type in {EventType.DEATH.value, EventType.REVIVE.value}:
-        return 3
-    if event_type in {EventType.ATTACK_HIT.value, EventType.SPELL_CAST.value, EventType.ENCOUNTER_STARTED.value}:
-        return 2
-    if event_type in {
-        EventType.DAMAGE_APPLIED.value,
-        EventType.ATTACK_MISSED.value,
-        EventType.ROOM_ENTERED.value,
-        EventType.ROOM_EXITED.value,
-        EventType.MOVEMENT_RESOLVED.value,
-    }:
-        return 1
-    return 0
+    return int(_EVENT_INTENSITY.get(event_type, 0))
 
 
 def build_event_beats(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

@@ -13,13 +13,20 @@ _ALLOWED_ENEMY_ACTIONS = [
 
 
 def system_instructions() -> str:
-    return base_system_instructions("enemy_ai", _ALLOWED_ENEMY_ACTIONS)
+    return (
+        base_system_instructions("enemy_ai", _ALLOWED_ENEMY_ACTIONS)
+        + " Select only legal `attack_id` or `spell_id` values from `legal_action_space`."
+        + " Select only alive `target_instance_ids` from `legal_action_space.target_instance_ids`."
+        + " Never invent IDs. If no legal tactical action exists, return `end_turn`."
+    )
 
 
 def build_user_payload(
     actor_instance_id: str,
     enemy_persona: str,
     combat_summary: Dict[str, Any],
+    legal_action_space: Dict[str, Any],
+    recent_decisions: List[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     return {
         "domain": "enemy_ai",
@@ -27,6 +34,8 @@ def build_user_payload(
         "enemy_persona": enemy_persona,
         "allowed_actions": list(_ALLOWED_ENEMY_ACTIONS),
         "combat_summary": dict(combat_summary),
+        "legal_action_space": dict(legal_action_space),
+        "recent_decisions": list(recent_decisions or []),
     }
 
 
@@ -42,9 +51,10 @@ def few_shot_examples() -> List[Dict[str, Any]]:
                 "type": "attack",
                 "actor_instance_id": "enemy_1",
                 "parameters": {
-                    "attack_id": "claw",
+                    "attack_id": "atk_enemy_basic",
                     "target_instance_ids": ["player_1"],
                 },
+                "reasoning": "Use a legal attack id from legal_action_space and pressure the weakest alive player.",
             },
         },
         {
@@ -53,6 +63,7 @@ def few_shot_examples() -> List[Dict[str, Any]]:
                 "type": "end_turn",
                 "actor_instance_id": "enemy_1",
                 "parameters": {},
+                "reasoning": "No legal high-value action is available this turn, so ending turn is safest.",
             },
         },
     ]

@@ -37,6 +37,8 @@ class PostGameState:
             "alive_players": len([player for player in getattr(session, "party", []) if getattr(player, "hp", 0) > 0]),
         }
 
+        reset_state_changes = session.reset_for_new_run()
+
         return ActionResult.success(
             events=[
                 {
@@ -49,7 +51,8 @@ class PostGameState:
                 "postgame": {
                     "outcome": self.outcome.value,
                     "summary": dict(self.summary),
-                }
+                },
+                **reset_state_changes,
             },
         )
 

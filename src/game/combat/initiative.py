@@ -33,6 +33,14 @@ def initiate_encounter(
     encounter: EncounterInstance,
     rng: random.Random | None = None,
 ) -> list[str]:
+    return [row["actor_instance_id"] for row in roll_initiative_rows(session=session, encounter=encounter, rng=rng)]
+
+
+def roll_initiative_rows(
+    session: SessionForInitiative,
+    encounter: EncounterInstance,
+    rng: random.Random | None = None,
+) -> list[dict[str, int | str]]:
     rng = rng or getattr(session, "rng", None) or random.Random(5)
     combatants = [
         *_alive_players(session),
@@ -56,4 +64,4 @@ def initiate_encounter(
             }
         )
     initiative_rows.sort(key=lambda row: (-row["initiative"], row["index"]))
-    return [row["actor_instance_id"] for row in initiative_rows]
+    return initiative_rows

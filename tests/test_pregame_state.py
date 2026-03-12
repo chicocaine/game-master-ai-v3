@@ -117,18 +117,24 @@ def _dungeon_template() -> DungeonTemplate:
 
 def _session_with_catalog_template_support() -> SimpleNamespace:
     session = _session()
+    race = _race()
+    archetype = _archetype()
+    weapon = _weapon()
     base_enemy = create_enemy(
         id="enemy_1",
         name="Enemy",
         description="",
-        race=_race(),
-        archetype=_archetype(),
-        weapons=[_weapon()],
+        race=race,
+        archetype=archetype,
+        weapons=[weapon],
         enemy_instance_id="",
     )
     catalog = Catalog(
         enemy_templates={"enemy_1": EnemyTemplate.from_enemy("enemy_1", base_enemy)},
         dungeon_templates={"dungeon_tpl_1": _dungeon_template()},
+        races={race.id: race},
+        archetypes={archetype.id: archetype},
+        weapons={weapon.id: weapon},
     )
     session.catalog = catalog
 
@@ -360,6 +366,32 @@ def test_handle_action_routes_pregame_actions() -> None:
     result = pregame.handle_action(session, start_action)
     assert result.ok is True
     assert session.state is GameState.EXPLORATION
+
+
+def test_handle_action_create_player_with_catalog_ids() -> None:
+    pregame = PreGameState()
+    session = _session_with_catalog_template_support()
+
+    create_player_action = create_action(
+        ActionType.CREATE_PLAYER,
+        parameters={
+            "id": "player_1",
+            "name": "Player",
+            "description": "New recruit",
+            "race": "race_1",
+            "archetype": "arch_1",
+            "weapons": ["wpn_1"],
+        },
+        actor_instance_id="system",
+    )
+
+    result = pregame.handle_action(session, create_player_action)
+
+    assert result.ok is True
+    assert len(session.party) == 1
+    assert session.party[0].race.id == "race_1"
+    assert session.party[0].archetype.id == "arch_1"
+    assert [weapon.id for weapon in session.party[0].weapons] == ["wpn_1"]
 
 
 def test_handle_action_choose_dungeon_by_id() -> None:

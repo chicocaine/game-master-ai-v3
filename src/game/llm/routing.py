@@ -43,6 +43,21 @@ def build_state_summary(session: Any) -> Dict[str, Any]:
             )
         summary["available_dungeons"] = available_dungeons
 
+        catalog = getattr(session, "catalog", None)
+        if catalog is not None:
+            summary["available_races"] = [
+                {"id": str(getattr(r, "id", "")), "name": str(getattr(r, "name", ""))}
+                for r in (getattr(catalog, "races", None) or {}).values()
+            ]
+            summary["available_archetypes"] = [
+                {"id": str(getattr(a, "id", "")), "name": str(getattr(a, "name", ""))}
+                for a in (getattr(catalog, "archetypes", None) or {}).values()
+            ]
+            summary["available_weapons"] = [
+                {"id": str(getattr(w, "id", "")), "name": str(getattr(w, "name", ""))}
+                for w in (getattr(catalog, "weapons", None) or {}).values()
+            ]
+
     if state_value == GameState.PREGAME.value:
         missing_requirements: list[str] = []
         if len(getattr(session, "party", [])) <= 0:

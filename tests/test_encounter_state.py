@@ -184,6 +184,9 @@ def test_start_encounter_uses_initiative_ordering() -> None:
 
     assert result.ok is True
     assert state.turn_order == ["enemy_1", "player_1"]
+    assert any(event["type"] == "initiative_result" for event in result.events)
+    assert any(event["type"] == "dice_rolled" for event in result.events)
+    assert any(event["type"] == "dice_result" for event in result.events)
     assert state.current_turn_index == 0
 
 
@@ -235,6 +238,7 @@ def test_turn_started_event_includes_enemy_persona() -> None:
     turn_started_events = [event for event in result.events if event["type"] == "turn_started"]
     assert turn_started_events
     assert turn_started_events[0].get("persona") == "aggressive_brute"
+    assert isinstance(turn_started_events[0].get("turn_index"), int)
 
 
 def test_action_handlers_resolve_combat_actions() -> None:

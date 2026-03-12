@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 MAX_PARTY_SIZE = 4
 
-
+#wala pa nahuman si pechayco
 @dataclass
 class PreGameState:
     started: bool = False
@@ -65,6 +65,89 @@ class PreGameState:
             except Exception as exc:  # pragma: no cover - defensive path
                 return None, str(exc)
         return None, "Unsupported dungeon payload type."
+
+    @staticmethod
+    def _resolve_race(session: "GameSession", value: Any) -> tuple[Race | None, str | None]:
+        if isinstance(value, Race):
+            return value, None
+        if isinstance(value, dict):
+            try:
+                return Race.from_dict(value), None
+            except Exception:
+                return None, "Invalid race payload."
+        if isinstance(value, str):
+            race_id = value.strip()
+            if not race_id:
+                return None, "Missing required parameter 'race' for action 'create_player'"
+            catalog = getattr(session, "catalog", None)
+            race_catalog = getattr(catalog, "races", None)
+            if isinstance(race_catalog, dict):
+                resolved = race_catalog.get(race_id)
+                if isinstance(resolved, Race):
+                    return resolved, None
+            return None, f"Race '{race_id}' was not found in race catalog."
+        return None, "Invalid race payload."
+
+    @staticmethod
+    def _resolve_archetype(session: "GameSession", value: Any) -> tuple[Archetype | None, str | None]:
+        if isinstance(value, Archetype):
+            return value, None
+        if isinstance(value, dict):
+            try:
+                return Archetype.from_dict(value), None
+            except Exception:
+                return None, "Invalid archetype payload."
+        if isinstance(value, str):
+            archetype_id = value.strip()
+            if not archetype_id:
+                return None, "Missing required parameter 'archetype' for action 'create_player'"
+            catalog = getattr(session, "catalog", None)
+            archetype_catalog = getattr(catalog, "archetypes", None)
+            if isinstance(archetype_catalog, dict):
+                resolved = archetype_catalog.get(archetype_id)
+                if isinstance(resolved, Archetype):
+                    return resolved, None
+            return None, f"Archetype '{archetype_id}' was not found in archetype catalog."
+        return None, "Invalid archetype payload."
+
+    @staticmethod
+    def _resolve_weapons(session: "GameSession", value: Any) -> tuple[List[Weapon] | None, str | None]:
+        if value is None:
+            return [], None
+        items: List[Any]
+        if isinstance(value, list):
+            items = value
+        elif isinstance(value, tuple):
+            items = list(value)
+        else:
+            items = [value]
+
+        catalog = getattr(session, "catalog", None)
+        weapon_catalog = getattr(catalog, "weapons", None)
+        resolved_weapons: List[Weapon] = []
+        for item in items:
+            if isinstance(item, Weapon):
+                resolved_weapons.append(item)
+                continue
+            if isinstance(item, dict):
+                try:
+                    resolved_weapons.append(Weapon.from_dict(item))
+                except Exception:
+                    return None, "Invalid weapon payload."
+                continue
+            if isinstance(item, str):
+                weapon_id = item.strip()
+                if not weapon_id:
+                    return None, "Invalid weapon payload."
+                if isinstance(weapon_catalog, dict):
+                    resolved = weapon_catalog.get(weapon_id)
+                    if isinstance(resolved, Weapon):
+                        resolved_weapons.append(resolved)
+                        continue
+                return None, f"Weapon '{weapon_id}' was not found in weapon catalog."
+            return None, "Invalid weapon payload."
+
+        return resolved_weapons, None
 
     def _next_player_instance_id(self, session: "GameSession") -> str:
         used_ids = {player.player_instance_id for player in session.party if player.player_instance_id}
@@ -254,14 +337,24 @@ class PreGameState:
             return ActionResult.failure(errors=validation_errors)
 
         if action.type is ActionType.CREATE_PLAYER:
+            race, race_error = self._resolve_race(session, action.parameters.get("race"))
+            if race_error:
+                return ActionResult.failure(errors=[race_error])
+            archetype, archetype_error = self._resolve_archetype(session, action.parameters.get("archetype"))
+            if archetype_error:
+                return ActionResult.failure(errors=[archetype_error])
+            weapons, weapons_error = self._resolve_weapons(session, action.parameters.get("weapons", []))
+            if weapons_error:
+                return ActionResult.failure(errors=[weapons_error])
+
             return self.handle_create_player(
                 session=session,
                 id=str(action.parameters.get("id", action.parameters.get("name", "player"))),
                 name=str(action.parameters.get("name", "")),
                 description=str(action.parameters.get("description", "")),
-                race=action.parameters.get("race"),
-                archetype=action.parameters.get("archetype"),
-                weapons=action.parameters.get("weapons", []),
+                race=race,
+                archetype=archetype,
+                weapons=weapons,
             )
 
         if action.type is ActionType.REMOVE_PLAYER:
@@ -271,15 +364,25 @@ class PreGameState:
             )
 
         if action.type is ActionType.EDIT_PLAYER:
+            race, race_error = self._resolve_race(session, action.parameters.get("race"))
+            if race_error:
+                return ActionResult.failure(errors=[race_error])
+            archetype, archetype_error = self._resolve_archetype(session, action.parameters.get("archetype"))
+            if archetype_error:
+                return ActionResult.failure(errors=[archetype_error])
+            weapons, weapons_error = self._resolve_weapons(session, action.parameters.get("weapons", []))
+            if weapons_error:
+                return ActionResult.failure(errors=[weapons_error])
+
             return self.handle_edit_player(
                 session=session,
                 player_instance_id=str(action.parameters.get("player_instance_id", "")),
                 id=str(action.parameters.get("id", action.parameters.get("name", "player"))),
                 name=str(action.parameters.get("name", "")),
                 description=str(action.parameters.get("description", "")),
-                race=action.parameters.get("race"),
-                archetype=action.parameters.get("archetype"),
-                weapons=action.parameters.get("weapons", []),
+                race=race,
+                archetype=archetype,
+                weapons=weapons,
             )
 
         if action.type is ActionType.CHOOSE_DUNGEON:

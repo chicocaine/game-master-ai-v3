@@ -35,7 +35,7 @@ def test_in_memory_event_sink_clear_resets_storage():
 def test_session_log_sink_writes_jsonl_events(tmp_path):
     sink = SessionLogSink(base_dir=str(tmp_path / "sessions"))
     ctx = EngineContext(session_id="session_42", step_count=7, seed=99)
-    events = [{"type": "turn_started", "actor_instance_id": "player_1"}]
+    events = [{"type": "turn_started", "actor_instance_id": "player_1", "turn_index": 2}]
 
     sink.publish(events, ctx)
 
@@ -48,7 +48,7 @@ def test_session_log_sink_writes_jsonl_events(tmp_path):
     record = json.loads(lines[0])
     assert record["session_id"] == "session_42"
     assert record["step_count"] == 7
-    assert record["turn_index"] == 7
+    assert record["turn_index"] == 2
     assert record["seed"] == 99
     assert record["event"] == events[0]
     assert isinstance(record["timestamp"], str)

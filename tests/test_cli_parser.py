@@ -12,6 +12,10 @@ def test_parse_cli_input_recognizes_commands_and_aliases() -> None:
     assert alias is not None
     assert alias.name == "quit"
 
+    restart = parse_cli_input("/restart")
+    assert restart is not None
+    assert restart.name == "restart"
+
 
 def test_parse_cli_input_treats_non_command_text_as_text() -> None:
     command = parse_cli_input("look around")

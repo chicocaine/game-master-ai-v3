@@ -43,7 +43,31 @@ def few_shot_examples() -> List[Dict[str, Any]]:
     examples.append(
         {
             "input": "Start the game now.",
-            "output": {"type": "start", "parameters": {}},
+            "output": {
+                "type": "start",
+                "parameters": {},
+                "reasoning": "The player clearly requested game start and no additional parameters are required.",
+            },
+        }
+    )
+    examples.append(
+        {
+            "input": "I choose Ember Ruins as the dungeon.",
+            "output": {
+                "type": "choose_dungeon",
+                "parameters": {"dungeon": "dng_ember_ruins"},
+                "reasoning": "The player explicitly selected a dungeon; mapped display name 'Ember Ruins' to canonical dungeon_id 'dng_ember_ruins'.",
+            },
+        }
+    )
+    examples.append(
+        {
+            "input": "Add Elara, a human mage with a sage staff.",
+            "output": {
+                "type": "converse",
+                "parameters": {"message": "Add Elara, a human mage with a sage staff."},
+                "reasoning": "Pregame setup requests like character creation should route to converse so the game master can confirm and handle the setup conversationally.",
+            },
         }
     )
     return examples

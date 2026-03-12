@@ -23,10 +23,15 @@ class SessionLogSink(EventSink):
         file_path = self._resolve_file_path(ctx.session_id)
         with file_path.open("a", encoding="utf-8") as handle:
             for event in events:
+                raw_turn_index = event.get("turn_index", ctx.step_count)
+                try:
+                    turn_index = int(raw_turn_index)
+                except (TypeError, ValueError):
+                    turn_index = int(ctx.step_count)
                 payload = {
                     "session_id": ctx.session_id,
                     "step_count": ctx.step_count,
-                    "turn_index": ctx.step_count,
+                    "turn_index": turn_index,
                     "seed": ctx.seed,
                     "timestamp": datetime.now(UTC).isoformat(),
                     "event": dict(event),

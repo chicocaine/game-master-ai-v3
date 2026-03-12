@@ -44,7 +44,7 @@ class JsonFilePersistence(Persistence):
         payload = {
             "session_id": session_id,
             "step_count": ctx.step_count,
-            "turn_index": ctx.step_count,
+            "turn_index": int(getattr(getattr(session, "encounter", None), "current_turn_index", ctx.step_count)),
             "seed": ctx.seed,
             "session": session.to_dict(),
             "last_action": action.to_dict() if action is not None else None,

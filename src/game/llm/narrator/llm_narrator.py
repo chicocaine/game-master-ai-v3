@@ -26,6 +26,7 @@ NARRATION_PROMPT_VERSION = "narration.v2"
 
 DEFAULT_NARRATION_TRIGGER_TYPES = {
     EventType.ROOM_ENTERED.value,
+    EventType.ENCOUNTER_STARTED.value,
     EventType.ATTACK_HIT.value,
     EventType.ATTACK_MISSED.value,
     EventType.DAMAGE_APPLIED.value,
@@ -153,7 +154,14 @@ class LlmNarrator:
             payload = parse_json_object(response.text)
             validated = validate_narration_payload(payload)
             bounded_text = self._limit_sentences(validated["text"], max_sentences=5)
-            self._append_timeline({"kind": "llm_narrator_output", "step_count": step_count, "text": bounded_text})
+            self._append_timeline(
+                {
+                    "kind": "llm_narrator_output",
+                    "step_count": step_count,
+                    "text": bounded_text,
+                    "reasoning": validated["reasoning"],
+                }
+            )
             if self.telemetry is not None:
                 self.telemetry.emit_call(
                     domain="narration",

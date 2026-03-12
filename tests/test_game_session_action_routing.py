@@ -407,6 +407,11 @@ def test_game_session_transition_matrix_and_postgame_contract() -> None:
     assert any(event["type"] == "game_finished" for event in result.events)
     assert any(event["type"] == "action_resolved" for event in result.events)
     assert result.state_changes["postgame"]["outcome"] == "abandoned"
+    assert result.state_changes["state"]["to"] == "pregame"
+    assert session.state is GameState.PREGAME
+    assert session.party == []
+    assert session.dungeon is None
+    assert session.points == 0
 
 
 def test_game_session_result_wrappers_capture_state_changes() -> None:

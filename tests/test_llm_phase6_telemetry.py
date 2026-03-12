@@ -64,7 +64,9 @@ def test_player_provider_emits_call_and_validation_telemetry_with_prompt_version
     telemetry = LlmTelemetry(sinks=[sink])
 
     provider = PlayerIntentLlmProvider(
-        client=_FakeClient([LlmResponse(text='{"type":"converse","parameters":{"message":"hello"}}')]),
+        client=_FakeClient(
+            [LlmResponse(text='{"type":"converse","parameters":{"message":"hello"},"reasoning":"Input is conversational and requires dialogue."}')]
+        ),
         settings=_settings(),
         telemetry=telemetry,
     )
@@ -161,7 +163,9 @@ def test_converse_responder_emits_prompt_version_telemetry():
     telemetry = LlmTelemetry(sinks=[sink])
 
     responder = ConverseResponder(
-        client=_FakeClient([LlmResponse(text='{"reply":"Greetings.","tone":"warm"}')]),
+        client=_FakeClient(
+            [LlmResponse(text="{\"reply\":\"Greetings.\",\"reasoning\":\"A warm greeting matches the player's opening and keeps momentum.\",\"tone\":\"warm\"}")]
+        ),
         settings=_settings(),
         telemetry=telemetry,
     )
@@ -172,5 +176,5 @@ def test_converse_responder_emits_prompt_version_telemetry():
     calls = [event for event in sink.events if event.get("kind") == "llm_call"]
     assert len(calls) == 1
     assert calls[0]["domain"] == "converse"
-    assert calls[0]["prompt_version"] == "converse.v2"
+    assert calls[0]["prompt_version"] == "converse.v4"
     assert calls[0]["context_token_estimate"] >= 0

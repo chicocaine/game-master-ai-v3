@@ -121,8 +121,11 @@ def test_validate_action_payload_requires_non_empty_type_and_object_parameters()
 
 
 def test_validate_narration_payload_accepts_minimum_shape():
-    payload = validate_narration_payload({"text": "A torch flickers."})
+    payload = validate_narration_payload(
+        {"text": "A torch flickers.", "reasoning": "A brief atmospheric beat fits the single transition event."}
+    )
     assert payload["text"] == "A torch flickers."
+    assert payload["reasoning"]
     assert payload["focus_event_ids"] == []
 
     with pytest.raises(LlmSchemaValidationError):

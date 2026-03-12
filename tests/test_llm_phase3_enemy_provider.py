@@ -40,7 +40,15 @@ def _settings():
 
 
 def _enemy(enemy_instance_id: str, persona: str = ""):
-    return SimpleNamespace(enemy_instance_id=enemy_instance_id, hp=9, max_hp=12, persona=persona)
+    return SimpleNamespace(
+        enemy_instance_id=enemy_instance_id,
+        hp=9,
+        max_hp=12,
+        spell_slots=1,
+        persona=persona,
+        merged_attacks=[SimpleNamespace(id="atk_enemy_basic")],
+        merged_spells=[SimpleNamespace(id="spl_enemy_bolt", spell_cost=1)],
+    )
 
 
 def _player(player_instance_id: str):
@@ -92,7 +100,7 @@ def test_enemy_provider_fallbacks_to_end_turn_on_llm_error():
     action = provider.next_action(session, EngineContext(session_id="s2"))
 
     assert action is not None
-    assert action.type is ActionType.END_TURN
+    assert action.type in {ActionType.ATTACK, ActionType.CAST_SPELL, ActionType.END_TURN}
     assert action.actor_instance_id == "enemy_1"
     assert action.metadata["fallback"] is True
     assert action.metadata["fallback_reason"].startswith("llm_error:")
@@ -117,7 +125,7 @@ def test_enemy_provider_validates_target_payload_and_fallbacks():
 
     action = provider.next_action(session, EngineContext(session_id="s3"))
 
-    assert action.type is ActionType.END_TURN
+    assert action.type in {ActionType.ATTACK, ActionType.CAST_SPELL, ActionType.END_TURN}
     assert action.metadata["fallback_reason"] == "invalid_target_payload"
 
 
@@ -149,7 +157,7 @@ def test_enemy_provider_accepts_valid_attack_payload():
     client = _FakeClient(
         [
             LlmResponse(
-                text='{"type":"attack","actor_instance_id":"enemy_1","parameters":{"attack_id":"claw","target_instance_ids":["player_1"]}}'
+                text='{"type":"attack","actor_instance_id":"enemy_1","parameters":{"attack_id":"atk_enemy_basic","target_instance_ids":["player_1"]}}'
             )
         ]
     )

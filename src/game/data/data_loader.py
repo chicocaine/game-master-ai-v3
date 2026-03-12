@@ -397,6 +397,9 @@ class DataLoader:
 			player_templates=player_templates,
 			enemy_templates=enemy_templates,
 			dungeon_templates=dungeon_templates,
+			races=races,
+			archetypes=archetypes,
+			weapons=weapons,
 		)
 
 

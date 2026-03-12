@@ -7,6 +7,9 @@ from typing import Dict, Tuple
 from game.actors.player import PlayerInstance
 from game.actors.enemy import Enemy
 from game.enums import DifficultyType, RestType
+from game.entity.blocks.archetype import Archetype
+from game.entity.blocks.race import Race
+from game.entity.blocks.weapon import Weapon
 
 
 @dataclass(frozen=True)
@@ -77,3 +80,6 @@ class Catalog:
     player_templates: Dict[str, PlayerTemplate] = field(default_factory=dict)
     enemy_templates: Dict[str, EnemyTemplate] = field(default_factory=dict)
     dungeon_templates: Dict[str, DungeonTemplate] = field(default_factory=dict)
+    races: Dict[str, Race] = field(default_factory=dict)
+    archetypes: Dict[str, Archetype] = field(default_factory=dict)
+    weapons: Dict[str, Weapon] = field(default_factory=dict)

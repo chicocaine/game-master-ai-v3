@@ -17,7 +17,7 @@ from game.llm.prompts import converse as converse_prompt
 from game.llm.telemetry import LlmTelemetry
 
 
-CONVERSE_PROMPT_VERSION = "converse.v2"
+CONVERSE_PROMPT_VERSION = "converse.v4"
 
 
 @dataclass
@@ -45,7 +45,14 @@ class ConverseResponder:
             return ["finish", "converse"]
         return ["converse"]
 
-    def _build_request(self, player_message: str, state_summary: Dict[str, Any], step_count: int | None = None) -> LlmRequest:
+    def _build_request(
+        self,
+        player_message: str,
+        state_summary: Dict[str, Any],
+        step_count: int | None = None,
+        parser_reasoning: str = "",
+        parser_metadata: Dict[str, Any] | None = None,
+    ) -> LlmRequest:
         timeline_entry = {"kind": "player_input", "player_input": str(player_message)}
         if step_count is not None:
             timeline_entry["step_count"] = int(step_count)
@@ -58,12 +65,17 @@ class ConverseResponder:
             max_timeline_items=12,
             max_timeline_tokens=max(96, self.settings.conversation.max_tokens // 3),
         )
-        payload = converse_prompt.build_user_payload(player_message=player_message, state_summary=state_summary)
+        payload = converse_prompt.build_user_payload(
+            player_message=player_message,
+            state_summary=state_summary,
+            parser_reasoning=parser_reasoning,
+            parser_metadata=parser_metadata,
+        )
         payload["context_envelope"] = context_envelope
         payload = fit_dict_to_token_budget(
             payload,
             max_tokens=max(64, self.settings.conversation.max_tokens // 2),
-            priority_keys=["domain", "player_message", "state_summary", "context_envelope"],
+            priority_keys=["domain", "player_message", "state_summary", "parser_reasoning", "parser_metadata", "reply_policy", "context_envelope"],
         )
         examples = get_few_shot_examples_with_budget(
             domain="converse",
@@ -112,17 +124,31 @@ class ConverseResponder:
         if not isinstance(metadata, dict):
             raise LlmSchemaValidationError("'metadata' must be an object when provided.")
 
+        reasoning = payload.get("reasoning", "")
+        if not isinstance(reasoning, str) or not reasoning.strip():
+            raise LlmSchemaValidationError("'reasoning' must be a non-empty string.")
+
         return {
             "reply": reply.strip(),
             "tone": tone.strip(),
+            "reasoning": reasoning.strip(),
             "metadata": dict(metadata),
         }
 
     @staticmethod
-    def _classify_response(player_message: str, state_summary: Dict[str, Any], reply: str) -> str:
+    def _classify_response(
+        player_message: str,
+        state_summary: Dict[str, Any],
+        reply: str,
+        parser_metadata: Dict[str, Any] | None = None,
+    ) -> str:
         message = str(player_message or "").strip().lower()
         state = str(state_summary.get("state", "")).strip().lower()
         reply_text = str(reply or "").strip().lower()
+        metadata = dict(parser_metadata or {})
+
+        if metadata.get("fallback_reason") == "pregame_setup_action":
+            return "setup_guidance"
 
         if state == "pregame" and "start" in message and (
             "cannot" in reply_text or "can't" in reply_text or "before" in reply_text
@@ -134,8 +160,21 @@ class ConverseResponder:
             return "clarification"
         return "light_roleplay"
 
-    def generate(self, player_message: str, state_summary: Dict[str, Any], step_count: int | None = None) -> Optional[Dict[str, Any]]:
-        request = self._build_request(player_message=player_message, state_summary=state_summary, step_count=step_count)
+    def generate(
+        self,
+        player_message: str,
+        state_summary: Dict[str, Any],
+        step_count: int | None = None,
+        parser_reasoning: str = "",
+        parser_metadata: Dict[str, Any] | None = None,
+    ) -> Optional[Dict[str, Any]]:
+        request = self._build_request(
+            player_message=player_message,
+            state_summary=state_summary,
+            step_count=step_count,
+            parser_reasoning=parser_reasoning,
+            parser_metadata=parser_metadata,
+        )
         started = time.perf_counter()
         response_text = ""
 
@@ -151,12 +190,14 @@ class ConverseResponder:
                     player_message=player_message,
                     state_summary=state_summary,
                     reply=validated["reply"],
+                    parser_metadata=parser_metadata,
                 )
             validated["metadata"] = metadata
             output_entry = {
                 "kind": "llm_converse_output",
                 "reply": validated["reply"],
                 "tone": validated["tone"],
+                "reasoning": validated["reasoning"],
             }
             if step_count is not None:
                 output_entry["step_count"] = int(step_count)

@@ -64,10 +64,16 @@ def test_create_llm_runtime_bundle_wires_shared_telemetry_and_ordered_providers(
     bundle = create_llm_runtime_bundle(
         settings=_settings(),
         clients=LlmClients(
-            player_intent=_FakeClient([LlmResponse(text='{"type":"converse","parameters":{"message":"hello"}}')]),
-            enemy_ai=_FakeClient([LlmResponse(text='{"type":"end_turn","actor_instance_id":"enemy_1","parameters":{}}')]),
-            narration=_FakeClient([LlmResponse(text='{"text":"Narration."}')]),
-            converse=_FakeClient([LlmResponse(text='{"reply":"GM reply.","tone":"calm"}')]),
+            player_intent=_FakeClient(
+                [LlmResponse(text='{"type":"converse","parameters":{"message":"hello"},"reasoning":"Input is conversational and requires dialogue."}')]
+            ),
+            enemy_ai=_FakeClient(
+                [LlmResponse(text='{"type":"end_turn","actor_instance_id":"enemy_1","parameters":{},"reasoning":"No better tactical option available."}')]
+            ),
+            narration=_FakeClient([LlmResponse(text='{"text":"Narration.","reasoning":"A concise transition summary fits the event."}')]),
+            converse=_FakeClient(
+                [LlmResponse(text='{"reply":"GM reply.","reasoning":"Responding directly to the player question advances play.","tone":"calm"}')]
+            ),
         ),
         telemetry_base_dir=str(tmp_path / "events"),
         enable_jsonl_telemetry=True,

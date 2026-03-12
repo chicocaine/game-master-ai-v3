@@ -36,11 +36,17 @@ class InteractiveCliProvider(ActionProvider):
     prompt: str = "gm> "
     quit_requested: bool = False
     requested_load_session_id: str | None = None
+    restart_requested: bool = False
     _last_error: str = field(default="", init=False)
 
     def pop_load_request(self) -> str | None:
         requested = self.requested_load_session_id
         self.requested_load_session_id = None
+        return requested
+
+    def pop_restart_request(self) -> bool:
+        requested = bool(self.restart_requested)
+        self.restart_requested = False
         return requested
 
     def next_action(self, session, ctx: EngineContext) -> Action | None:
@@ -51,7 +57,7 @@ class InteractiveCliProvider(ActionProvider):
 
             try:
                 raw_text = self.input_fn(self.prompt)
-            except EOFError:
+            except (EOFError, StopIteration):
                 self.quit_requested = True
                 return None
 
@@ -71,7 +77,7 @@ class InteractiveCliProvider(ActionProvider):
             action = self._handle_command(session, ctx, command)
             if action is not None:
                 return action
-            if self.quit_requested or self.requested_load_session_id is not None:
+            if self.quit_requested or self.requested_load_session_id is not None or self.restart_requested:
                 return None
 
     def _handle_command(self, session, ctx: EngineContext, command: CliCommand) -> Action | None:
@@ -113,6 +119,9 @@ class InteractiveCliProvider(ActionProvider):
             return None
         if command.name == "quit":
             self.quit_requested = True
+            return None
+        if command.name == "restart":
+            self.restart_requested = True
             return None
         if command.name == "add":
             return self._build_add_player_action(session, command)
@@ -241,7 +250,7 @@ class LiveLlmCliProvider(InteractiveCliProvider):
 
             try:
                 raw_text = self.input_fn(self.prompt)
-            except EOFError:
+            except (EOFError, StopIteration):
                 self.quit_requested = True
                 return None
 
@@ -273,5 +282,5 @@ class LiveLlmCliProvider(InteractiveCliProvider):
             action = self._handle_command(session, ctx, command)
             if action is not None:
                 return action
-            if self.quit_requested or self.requested_load_session_id is not None:
+            if self.quit_requested or self.requested_load_session_id is not None or self.restart_requested:
                 return None

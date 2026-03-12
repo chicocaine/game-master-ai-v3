@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, List
 from game.core.action import Action, validate_action
 from game.core.action_result import ActionResult
 from game.core.enums import ActionType, EventType
-from game.combat.initiative import initiate_encounter
+from game.combat.initiative import roll_initiative_rows
 from game.combat.resolution import calculate_damage_multiplier, resolve_attack_action, resolve_cast_spell_action
 from game.combat.status_effect import merged_damage_affinities_from_effects, tick_and_prune_status_effects
 from game.enums import ControlType, DamageType, GameState, StatusEffectType
@@ -81,18 +81,55 @@ class EncounterState:
             enemy.enemy_instance_id = f"enemy_{index}"
 
         self.current_encounter = encounter
-        self.turn_order = initiate_encounter(session, encounter)
+        initiative_rows = roll_initiative_rows(session, encounter)
+        self.turn_order = [str(row["actor_instance_id"]) for row in initiative_rows]
         self.current_turn_index = 0
         transition_result = self._transition(session, GameState.ENCOUNTER)
         if transition_result.errors:
             return transition_result
+
+        dice_events: List[dict] = []
+        for row in initiative_rows:
+            actor_instance_id = str(row["actor_instance_id"])
+            roll = int(row["roll"])
+            modifier = int(row["modifier"])
+            total = int(row["initiative"])
+            dice_events.extend(
+                [
+                    {
+                        "type": EventType.DICE_ROLLED.value,
+                        "roll_context": "initiative",
+                        "actor_instance_id": actor_instance_id,
+                        "notation": "1d20",
+                        "roll": roll,
+                    },
+                    {
+                        "type": EventType.DICE_RESULT.value,
+                        "roll_context": "initiative",
+                        "actor_instance_id": actor_instance_id,
+                        "base_roll": roll,
+                        "modifier": modifier,
+                        "total": total,
+                    },
+                ]
+            )
 
         events = [
             *transition_result.events,
             {
                 "type": EventType.INITIATIVE_ROLLED.value,
                 "encounter_id": encounter.id,
+                "initiative_rows": [dict(row) for row in initiative_rows],
                 "turn_order": list(self.turn_order),
+                "turn_index": self.current_turn_index,
+            },
+            *dice_events,
+            {
+                "type": EventType.INITIATIVE_RESULT.value,
+                "encounter_id": encounter.id,
+                "turn_order": list(self.turn_order),
+                "current_actor_instance_id": self._current_actor_instance_id(),
+                "turn_index": self.current_turn_index,
             },
             {
                 "type": EventType.ENCOUNTER_STARTED.value,
@@ -100,6 +137,7 @@ class EncounterState:
                 "encounter_name": str(getattr(encounter, "name", "")),
                 "enemy_ids": [str(getattr(enemy, "enemy_instance_id", "")) for enemy in list(encounter.enemies)],
                 "turn_order": list(self.turn_order),
+                "turn_index": self.current_turn_index,
             },
         ]
         current_actor_id = self._current_actor_instance_id()
@@ -108,6 +146,7 @@ class EncounterState:
                 {
                     "type": EventType.TURN_STARTED.value,
                     "actor_instance_id": current_actor_id,
+                    "turn_index": self.current_turn_index,
                 }
             )
         return ActionResult.success(events=events, state_changes=dict(transition_result.state_changes))
@@ -293,7 +332,13 @@ class EncounterState:
             session.state = GameState.POSTGAME
             return ActionResult.success(state_changes={"state": {"to": GameState.POSTGAME.value}})
 
-        events: List[dict] = [{"type": EventType.TURN_ENDED.value, "actor_instance_id": self._current_actor_instance_id()}]
+        events: List[dict] = [
+            {
+                "type": EventType.TURN_ENDED.value,
+                "actor_instance_id": self._current_actor_instance_id(),
+                "turn_index": self.current_turn_index,
+            }
+        ]
 
         checked = 0
         next_index = self.current_turn_index
@@ -309,6 +354,7 @@ class EncounterState:
                         "type": EventType.TURN_SKIPPED.value,
                         "actor_instance_id": next_actor_id,
                         "reason": "dead_or_missing",
+                        "turn_index": next_index,
                     }
                 )
                 continue
@@ -318,6 +364,7 @@ class EncounterState:
                         "type": EventType.TURN_SKIPPED.value,
                         "actor_instance_id": next_actor_id,
                         "reason": "control",
+                        "turn_index": next_index,
                     }
                 )
                 continue
@@ -334,6 +381,7 @@ class EncounterState:
             turn_started_event = {
                 "type": EventType.TURN_STARTED.value,
                 "actor_instance_id": self.turn_order[self.current_turn_index],
+                "turn_index": self.current_turn_index,
             }
             persona = getattr(current_actor, "persona", "") if current_actor is not None else ""
             if persona:

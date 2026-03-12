@@ -66,7 +66,7 @@ def _session(state: GameState) -> _SessionStub:
 
 
 def test_llm_narrator_only_triggers_for_triggerable_events():
-    client = _FakeClient([LlmResponse(text='{"text":"narrated"}')])
+    client = _FakeClient([LlmResponse(text='{"text":"narrated","reasoning":"Room transition event triggers narration."}')])
     narrator = LlmNarrator(client=client, settings=_settings())
 
     non_trigger_events = [{"type": "action_validated"}]
@@ -106,8 +106,22 @@ def test_llm_narrator_handles_malformed_output_without_raising():
     assert client.calls == 1
 
 
+def test_llm_narrator_triggers_on_encounter_started_event():
+    client = _FakeClient([LlmResponse(text='{"text":"Steel sings as foes emerge.","reasoning":"Encounter start should trigger scene-setting narration."}')])
+    narrator = LlmNarrator(client=client, settings=_settings())
+
+    output = narrator.narrate(
+        [{"type": "encounter_started", "encounter_id": "enc_1", "turn_order": ["player_1", "enemy_1"]}],
+        _session(GameState.ENCOUNTER),
+        EngineContext(session_id="n3b"),
+    )
+
+    assert output == "Steel sings as foes emerge."
+    assert client.calls == 1
+
+
 def test_player_intent_provider_returns_intent_only_converse_action():
-    intent_client = _FakeClient([LlmResponse(text='{"type":"converse","parameters":{"message":"hello"}}')])
+    intent_client = _FakeClient([LlmResponse(text='{"type":"converse","parameters":{"message":"assistant text"},"reasoning":"Need clarification."}')])
     provider = PlayerIntentLlmProvider(client=intent_client, settings=_settings())
     provider.enqueue(text="hello", actor_instance_id="player_1")
 
@@ -115,12 +129,13 @@ def test_player_intent_provider_returns_intent_only_converse_action():
 
     assert action is not None
     assert action.type is ActionType.CONVERSE
+    assert action.parameters["message"] == "hello"
     assert action.metadata["provider"] == "player_intent_llm"
     assert "converse_response" not in action.metadata
 
 
 def test_player_intent_provider_keeps_converse_action_without_responder_coupling():
-    intent_client = _FakeClient([LlmResponse(text='{"type":"converse","parameters":{"message":"hello"}}')])
+    intent_client = _FakeClient([LlmResponse(text='{"type":"converse","parameters":{"message":"assistant text"},"reasoning":"Need clarification."}')])
     provider = PlayerIntentLlmProvider(client=intent_client, settings=_settings())
     provider.enqueue(text="hello", actor_instance_id="player_1")
 
@@ -128,11 +143,18 @@ def test_player_intent_provider_keeps_converse_action_without_responder_coupling
 
     assert action is not None
     assert action.type is ActionType.CONVERSE
+    assert action.parameters["message"] == "hello"
     assert "converse_response" not in action.metadata
 
 
 def test_converse_responder_adds_response_class_metadata_when_missing():
-    converse_client = _FakeClient([LlmResponse(text='{"reply":"You can move to room_2.","tone":"helpful"}')])
+    converse_client = _FakeClient(
+        [
+            LlmResponse(
+                text='{"reply":"You can move to room_2.","reasoning":"The player asked a location question in exploration state.","tone":"helpful"}'
+            )
+        ]
+    )
     responder = ConverseResponder(client=converse_client, settings=_settings())
 
     payload = responder.generate("Where can I go?", {"state": "exploration"})
@@ -143,11 +165,52 @@ def test_converse_responder_adds_response_class_metadata_when_missing():
         "world_query",
         "light_roleplay",
         "blocked_transition",
+        "setup_guidance",
     }
 
 
+def test_converse_responder_marks_pregame_setup_fallback_as_setup_guidance():
+    converse_client = _FakeClient(
+        [
+            LlmResponse(
+                text='{"reply":"I can set that up. I have Elara as a human mage with a sage staff. Confirm and I will use those setup details.","reasoning":"Pregame setup requests should be handled as confirmation or clarification, not as already-completed actions.","tone":"helpful"}'
+            )
+        ]
+    )
+    responder = ConverseResponder(client=converse_client, settings=_settings())
+
+    payload = responder.generate(
+        "Add Elara, a human mage with a sage staff.",
+        {"state": "pregame"},
+        parser_reasoning="Pregame setup request should be handled conversationally.",
+        parser_metadata={
+            "fallback_reason": "pregame_setup_action",
+            "requested_action_type": "create_player",
+            "requested_parameters": {
+                "name": "Elara",
+                "race": "race_human",
+                "archetype": "arch_mage",
+                "weapons": ["wpn_sage_staff"],
+            },
+        },
+    )
+
+    assert payload is not None
+    assert payload["metadata"]["response_class"] == "setup_guidance"
+
+    user_payload = None
+    for message in converse_client.last_request.messages:
+        if message.role == "user":
+            user_payload = json.loads(message.content)
+            break
+
+    assert user_payload is not None
+    assert user_payload["reply_policy"]["mode"] == "setup_guidance"
+    assert user_payload["reply_policy"]["requested_action_type"] == "create_player"
+
+
 def test_llm_narrator_includes_beats_and_sentence_policy_in_request_payload():
-    client = _FakeClient([LlmResponse(text='{"text":"One. Two."}')])
+    client = _FakeClient([LlmResponse(text='{"text":"One. Two.","reasoning":"Combat and transition beats justify two concise sentences."}')])
     narrator = LlmNarrator(client=client, settings=_settings())
 
     events = [
@@ -172,7 +235,7 @@ def test_llm_narrator_includes_beats_and_sentence_policy_in_request_payload():
 
 def test_llm_narrator_enforces_five_sentence_hard_limit():
     long_text = "S1. S2. S3. S4. S5. S6."
-    client = _FakeClient([LlmResponse(text='{"text":"' + long_text + '"}')])
+    client = _FakeClient([LlmResponse(text='{"text":"' + long_text + '","reasoning":"Multiple beats require a bounded narrative summary."}')])
     narrator = LlmNarrator(client=client, settings=_settings())
 
     output = narrator.narrate(

@@ -46,6 +46,7 @@ def few_shot_examples() -> List[Dict[str, Any]]:
             "output": {
                 "type": "attack",
                 "parameters": {"attack_id": "slash", "target_instance_ids": ["enemy_1"]},
+                "reasoning": "The player specified a valid attack and target, so attack is complete and actionable.",
             },
         }
     )
@@ -59,8 +60,9 @@ def few_shot_examples() -> List[Dict[str, Any]]:
             "output": {
                 "type": "converse",
                 "parameters": {
-                    "message": "I can't find spell 'fireball' in your current available spells. Choose one listed in available_spells."
+                    "message": "Cast fireball on enemy_2"
                 },
+                "reasoning": "The requested spell is not available in the current combat menu, so clarification through converse is required.",
                 "metadata": {"reason": "invalid_menu_selection"},
             },
         }

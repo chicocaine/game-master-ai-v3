@@ -6,6 +6,7 @@ from typing import Any, Deque, Dict, Optional
 
 from game.core.action import Action
 from game.core.action import create_action
+from game.core.action import validate_action
 from game.core.enums import ActionType
 from game.engine.interfaces import ActionProvider, EngineContext
 from game.enums import GameState
@@ -105,10 +106,11 @@ class PlayerIntentLlmProvider(ActionProvider):
             state_summary=state_summary,
             context_envelope=context_envelope,
         )
+        payload["recent_conversation"] = self._recent_conversation_for_prompt(max_items=8)
         payload = fit_dict_to_token_budget(
             payload,
             max_tokens=max(128, self.settings.action.max_tokens // 2),
-            priority_keys=["state", "allowed_actions", "player_input", "state_summary", "context_envelope"],
+            priority_keys=["state", "allowed_actions", "player_input", "recent_conversation", "state_summary", "context_envelope"],
         )
         response_schema = prompt_module.build_response_schema()
         examples = get_few_shot_examples_with_budget(
@@ -146,8 +148,74 @@ class PlayerIntentLlmProvider(ActionProvider):
             },
         )
 
+    def _recent_conversation_for_prompt(self, max_items: int = 8) -> list[dict[str, Any]]:
+        items = list(self.timeline)[-max_items:]
+        compact: list[dict[str, Any]] = []
+        for item in items:
+            entry: dict[str, Any] = {}
+            kind = item.get("kind")
+            if isinstance(kind, str) and kind:
+                entry["kind"] = kind
+
+            player_input = item.get("player_input")
+            if isinstance(player_input, str) and player_input.strip():
+                entry["player_input"] = player_input
+
+            action_type = item.get("type")
+            if isinstance(action_type, str) and action_type:
+                entry["action_type"] = action_type
+
+            parameters = item.get("parameters")
+            if isinstance(parameters, dict) and parameters:
+                entry["parameters"] = dict(parameters)
+
+            fallback_reason = item.get("fallback_reason")
+            if isinstance(fallback_reason, str) and fallback_reason:
+                entry["fallback_reason"] = fallback_reason
+
+            converse_message = item.get("converse_message")
+            if isinstance(converse_message, str) and converse_message.strip():
+                entry["converse_message"] = converse_message
+
+            if entry:
+                compact.append(entry)
+        return compact
+
     def _allowed_action_values(self, session: Any) -> list[str]:
         return allowed_action_values_for_state(session.state)
+
+    @staticmethod
+    def _player_text_for_converse(user_message: PlayerInputMessage) -> str:
+        text = str(user_message.text or "").strip()
+        return text if text else "I need clarification."
+
+    def _route_to_converse(
+        self,
+        *,
+        user_message: PlayerInputMessage,
+        reason: str,
+        reasoning: str,
+        metadata_extra: Dict[str, Any] | None = None,
+    ) -> Action:
+        player_text = self._player_text_for_converse(user_message)
+        metadata: Dict[str, Any] = {
+            "provider": "player_intent_llm",
+            "fallback": True,
+            "fallback_reason": reason,
+        }
+        if metadata_extra:
+            metadata.update(dict(metadata_extra))
+        if self.include_provider_metadata and user_message.metadata:
+            metadata["input_metadata"] = dict(user_message.metadata)
+
+        return create_action(
+            action_type=ActionType.CONVERSE,
+            parameters={"message": player_text},
+            actor_instance_id=user_message.actor_instance_id,
+            raw_input=user_message.text,
+            reasoning=reasoning,
+            metadata=metadata,
+        )
 
     def _fallback_action(self, user_message: PlayerInputMessage, reason: str) -> Optional[Action]:
         stripped = user_message.text.strip()
@@ -163,27 +231,13 @@ class PlayerIntentLlmProvider(ActionProvider):
         )
         if self.telemetry is not None:
             self.telemetry.emit_fallback("player_intent", PLAYER_INTENT_PROMPT_VERSION, reason)
-        metadata: Dict[str, Any] = {
-            "provider": "player_intent_llm",
-            "fallback": True,
-            "fallback_reason": reason,
-        }
-        if self.include_provider_metadata and user_message.metadata:
-            metadata["input_metadata"] = dict(user_message.metadata)
-
-        return create_action(
-            action_type=ActionType.CONVERSE,
-            parameters={"message": stripped},
-            actor_instance_id=user_message.actor_instance_id,
-            raw_input=user_message.text,
-            metadata=metadata,
+        return self._route_to_converse(
+            user_message=user_message,
+            reason=reason,
+            reasoning="The parser could not safely produce a valid non-converse action, so conversation is required.",
         )
 
     def _clarification_converse(self, user_message: PlayerInputMessage) -> Action:
-        message = (
-            "I need a bit more detail to resolve that action. "
-            "Tell me your exact intent, target, or destination."
-        )
         self._append_timeline(
             {
                 "kind": "clarification_requested",
@@ -194,26 +248,38 @@ class PlayerIntentLlmProvider(ActionProvider):
         if self.telemetry is not None:
             self.telemetry.emit_fallback("player_intent", PLAYER_INTENT_PROMPT_VERSION, "ambiguous_input")
 
-        return create_action(
-            action_type=ActionType.CONVERSE,
-            parameters={"message": message},
-            actor_instance_id=user_message.actor_instance_id,
-            raw_input=user_message.text,
-            metadata={
-                "provider": "player_intent_llm",
-                "fallback": True,
-                "fallback_reason": "ambiguous_input",
-            },
+        return self._route_to_converse(
+            user_message=user_message,
+            reason="ambiguous_input",
+            reasoning=(
+                "The player's message is too ambiguous to determine complete required parameters, "
+                "so this is routed to converse for clarification."
+            ),
         )
 
     def _action_from_payload(self, payload: dict[str, Any], user_message: PlayerInputMessage) -> Action:
         validated = validate_action_payload(payload)
+        action_type = str(validated["type"])
+        normalized_parameters = dict(validated["parameters"])
+        if action_type in {"converse", "query", "interact"}:
+            normalized_parameters["message"] = self._player_text_for_converse(user_message)
+
+        reasoning = str(validated["reasoning"] or "").strip()
+        if not reasoning:
+            if action_type in {"converse", "query", "interact"}:
+                reasoning = (
+                    "The input does not provide complete parameters for a concrete gameplay action; "
+                    "route to converse for clarification."
+                )
+            else:
+                reasoning = "Action selected from player intent and current state constraints."
+
         action_data = {
-            "type": validated["type"],
-            "parameters": validated["parameters"],
+            "type": action_type,
+            "parameters": normalized_parameters,
             "actor_instance_id": validated["actor_instance_id"] or user_message.actor_instance_id,
             "raw_input": user_message.text,
-            "reasoning": validated["reasoning"],
+            "reasoning": reasoning,
             "metadata": validated["metadata"],
         }
 
@@ -246,7 +312,6 @@ class PlayerIntentLlmProvider(ActionProvider):
         else:
             requirement_text = ", and ".join([", ".join(missing[:-1]), missing[-1]])
 
-        message = f"You cannot start yet. Please set up {requirement_text} first."
         self._append_timeline(
             {
                 "kind": "blocked_start",
@@ -255,17 +320,11 @@ class PlayerIntentLlmProvider(ActionProvider):
             }
         )
 
-        return create_action(
-            action_type=ActionType.CONVERSE,
-            parameters={"message": message},
-            actor_instance_id=user_message.actor_instance_id,
-            raw_input=user_message.text,
-            metadata={
-                "provider": "player_intent_llm",
-                "fallback": True,
-                "fallback_reason": "blocked_start",
-                "missing_requirements": list(missing),
-            },
+        return self._route_to_converse(
+            user_message=user_message,
+            reason="blocked_start",
+            reasoning=f"Cannot execute start because setup is incomplete: {requirement_text}.",
+            metadata_extra={"missing_requirements": list(missing)},
         )
 
     def next_action(self, session: Any, ctx: EngineContext) -> Optional[Action]:
@@ -337,7 +396,13 @@ class PlayerIntentLlmProvider(ActionProvider):
                     valid=False,
                     error_type="disallowed_action_type",
                 )
-            return self._fallback_action(user_message, reason="disallowed_action_type")
+            return self._route_to_converse(
+                user_message=user_message,
+                reason="disallowed_action_type",
+                reasoning=(
+                    f"Model returned disallowed action type '{action.type.value}' for state '{session.state.value}'."
+                ),
+            )
 
         if action.type is ActionType.START:
             blocked = self._blocked_start_converse(session, user_message)
@@ -345,6 +410,25 @@ class PlayerIntentLlmProvider(ActionProvider):
                 if self.telemetry is not None:
                     self.telemetry.emit_fallback("player_intent", PLAYER_INTENT_PROMPT_VERSION, "blocked_start")
                 return blocked
+
+        action_errors = validate_action(action)
+        if action_errors:
+            if self.telemetry is not None:
+                self.telemetry.emit_validation(
+                    domain="player_intent",
+                    prompt_version=PLAYER_INTENT_PROMPT_VERSION,
+                    valid=False,
+                    error_type="invalid_action_parameters",
+                )
+            return self._route_to_converse(
+                user_message=user_message,
+                reason="invalid_action_parameters",
+                reasoning=(
+                    "Model output did not satisfy required action parameters: "
+                    + "; ".join(action_errors)
+                ),
+                metadata_extra={"validation_errors": list(action_errors)},
+            )
 
         self._append_timeline(
             {
@@ -369,5 +453,17 @@ class PlayerIntentLlmProvider(ActionProvider):
                 prompt_version=PLAYER_INTENT_PROMPT_VERSION,
                 valid=True,
             )
+
+        emit_context(
+            domain="player_intent",
+            prompt_version=PLAYER_INTENT_PROMPT_VERSION,
+            step_count=step_count,
+            llm_returned_action={
+                "type": action.type.value,
+                "actor_instance_id": action.actor_instance_id,
+                "parameters": dict(action.parameters),
+                "metadata": dict(action.metadata),
+            },
+        )
 
         return action
