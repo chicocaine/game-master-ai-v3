@@ -349,7 +349,6 @@ class DataLoader:
 				immunities=entity.immunities,
 				vulnerabilities=entity.vulnerabilities,
 				cc_immunities=entity.cc_immunities,
-				enemy_instance_id="",
 				persona=str(row.get("persona", "")),
 			)
 			enemy_templates[enemy_id] = EnemyTemplate.from_enemy(enemy_id, enemy)
