@@ -162,9 +162,9 @@ class InteractiveCliProvider(ActionProvider):
                 "id": player.id,
                 "name": player.name,
                 "description": player.description,
-                "race": player.race,
-                "archetype": player.archetype,
-                "weapons": list(player.weapons),
+                "race": player.race.id,
+                "archetype": player.archetype.id,
+                "weapons": [weapon.id for weapon in list(player.weapons)],
             },
         )
 

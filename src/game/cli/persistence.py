@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict, is_dataclass
 from dataclasses import dataclass
+from enum import Enum
+from types import MappingProxyType
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Optional
@@ -22,6 +25,19 @@ class JsonFilePersistence(Persistence):
         directory = Path(self.base_dir)
         directory.mkdir(parents=True, exist_ok=True)
         return directory / f"{session_id}.json"
+
+    @staticmethod
+    def _json_default(value):
+        if isinstance(value, Enum):
+            return value.value
+        if isinstance(value, MappingProxyType):
+            return dict(value)
+        to_dict = getattr(value, "to_dict", None)
+        if callable(to_dict):
+            return to_dict()
+        if is_dataclass(value):
+            return asdict(value)
+        return str(value)
 
     def load(self, session_id: str) -> Optional[GameSession]:
         file_path = self._resolve_file_path(session_id)
@@ -51,7 +67,7 @@ class JsonFilePersistence(Persistence):
             "last_action": action.to_dict() if action is not None else None,
             "last_result": result.to_dict() if result is not None else None,
         }
-        snapshot_text = json.dumps(payload, ensure_ascii=False, indent=2)
+        snapshot_text = json.dumps(payload, ensure_ascii=False, indent=2, default=self._json_default)
         with NamedTemporaryFile("w", encoding="utf-8", dir=str(file_path.parent), delete=False) as handle:
             handle.write(snapshot_text)
             temp_path = Path(handle.name)
