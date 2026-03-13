@@ -124,7 +124,7 @@ def base_system_instructions(domain_name: str, allowed_action_values: list[str])
         "(e.g. use 'race_human' not 'Human', 'arch_knight' not 'Knight', 'wpn_iron_sword' not 'Iron Sword'). "
         "For choose_dungeon, 'dungeon' must be the exact ID from available_dungeons (e.g. 'dng_ember_ruins' not 'Ember Ruins'). "
         "Do not include markdown, code fences, or prose outside the JSON object."
-        "Never generate "
+        "You can infer and reason out the required action parameters based on the context as long as it is accurate."
     )
 
 

@@ -66,7 +66,17 @@ def few_shot_examples() -> List[Dict[str, Any]]:
             "output": {
                 "type": "converse",
                 "parameters": {"message": "Add Elara, a human mage with a sage staff."},
-                "reasoning": "Pregame setup requests like character creation should route to converse so the game master can confirm and handle the setup conversationally.",
+                "reasoning": "The description is ambiguous, so we should converse so we can confirm a description.",
+            },
+        }
+    )
+    examples.append(
+        {
+            "input": "Can you add an archer elf named Annika, a fast but clumsy elf?",
+            "output": {
+                "type": "create_player",
+                "parameters": {"id": "player_annika", "name": "Annika", "description": "A fast but clumsy elf.", "race": "race_elf", "archetype": "arch_ranger", "weapons": ["wpn_hunter_bow"]},
+                "reasoning": "While the player did not specify a weapon, the only archer weapon based on the weapon list is a bow so we should create a player with the bow as a weapon.",
             },
         }
     )
