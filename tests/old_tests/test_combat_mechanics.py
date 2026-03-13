@@ -508,6 +508,97 @@ def test_spell_hit_result_payload_includes_save_dc() -> None:
     assert hit_result["requirement"]["target_value"] == 10
 
 
+def test_multi_type_spell_applies_damage_and_status_on_hit() -> None:
+    session, state, encounter = _start_encounter()
+
+    spell = Spell(
+        id="spell_ice_lance",
+        name="Ice Lance",
+        description="",
+        type=[SpellType.ATTACK, SpellType.CONTROL],
+        spell_cost=0,
+        parameters={
+            "damage_roll": "1d8+0",
+            "damage_types": [DamageType.COLD.value],
+            "DC": 10,
+            "applied_status_effects": [
+                _effect_payload(_effect("stun", StatusEffectType.CONTROL, 1, control_type=ControlType.STUNNED))
+            ],
+        },
+    )
+    session.party[0].known_spells = [spell]
+    encounter.enemies[0].initiative_mod = 0
+
+    hp_before = encounter.enemies[0].hp
+    with patch("game.combat.resolution.roll_save_throw", return_value=5), patch(
+        "game.combat.resolution.roll_dice", return_value=6
+    ):
+        result = _cast_spell(state, session, "spell_ice_lance")
+
+    assert result.ok is True
+    assert encounter.enemies[0].hp == hp_before - 6
+    assert any(event.get("type") == "attack_hit" for event in result.events)
+    assert any(event.get("type") == "damage_applied" and event.get("amount") == 6 for event in result.events)
+    assert any(event.get("type") == "status_effect_applied" for event in result.events)
+
+
+def test_data_loader_rejects_spell_with_single_and_aoe_counterpart_types(tmp_path) -> None:
+    from pathlib import Path
+    import json
+
+    from game.data.data_loader import DataLoader, DataLoaderError
+
+    root = Path("/home/chicocaine/artificial-intelligence/game-master-ai-v3")
+    data_dir = tmp_path / "data"
+    schema_dir = data_dir / "schemata"
+    data_dir.mkdir()
+    schema_dir.mkdir()
+
+    dataset_names = [
+        "status_effects",
+        "attacks",
+        "spells",
+        "weapons",
+        "races",
+        "archetypes",
+        "players",
+        "enemies",
+        "dungeons",
+    ]
+    schema_names = [
+        "status_effect.schema.json",
+        "attack.schema.json",
+        "spell.schema.json",
+        "weapon.schema.json",
+        "race.schema.json",
+        "archetype.schema.json",
+        "player.schema.json",
+        "enemy.schema.json",
+        "dungeon.schema.json",
+    ]
+
+    for dataset_name in dataset_names:
+        payload = json.loads((root / "data" / f"{dataset_name}.json").read_text(encoding="utf-8"))
+        if dataset_name == "spells":
+            payload[0]["type"] = ["attack", "aoe_attack"]
+        (data_dir / f"{dataset_name}.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    for schema_name in schema_names:
+        (schema_dir / schema_name).write_text(
+            (root / "data" / "schemata" / schema_name).read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+
+    loader = DataLoader(data_dir=data_dir, schema_dir=schema_dir, validate_schema=False)
+
+    try:
+        loader.validate()
+    except DataLoaderError as exc:
+        assert "cannot mix spell types 'attack' and 'aoe_attack'" in str(exc)
+    else:
+        raise AssertionError("Expected DataLoaderError for contradictory spell types.")
+
+
 def test_cleanse_without_filters_removes_all_effects() -> None:
     session, state, encounter = _start_encounter()
     target = encounter.enemies[0]

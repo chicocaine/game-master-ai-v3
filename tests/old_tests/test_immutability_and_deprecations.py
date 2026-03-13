@@ -66,6 +66,32 @@ def test_attack_and_spell_are_frozen_and_parameters_are_immutable() -> None:
         spell.parameters["damage_roll"] = "9d9+9"
 
 
+def test_spell_normalizes_multi_type_payloads() -> None:
+    spell = Spell(
+        id="spl_multi",
+        name="Hybrid",
+        description="",
+        type=[SpellType.ATTACK, SpellType.CONTROL],
+        spell_cost=1,
+        parameters={},
+    )
+
+    assert spell.spell_types == (SpellType.ATTACK, SpellType.CONTROL)
+    assert spell.to_dict()["type"] == [SpellType.ATTACK.value, SpellType.CONTROL.value]
+
+
+def test_spell_rejects_single_and_aoe_counterpart_in_same_list() -> None:
+    with pytest.raises(ValueError):
+        Spell(
+            id="spl_invalid",
+            name="Invalid",
+            description="",
+            type=[SpellType.ATTACK, SpellType.AOE_ATTACK],
+            spell_cost=1,
+            parameters={},
+        )
+
+
 def test_race_archetype_weapon_are_frozen_and_normalize_to_tuples() -> None:
     attack = Attack(id="atk_1", name="Strike", description="", type=AttackType.MELEE, parameters={})
     spell = Spell(id="spl_1", name="Spark", description="", type=SpellType.ATTACK, spell_cost=1, parameters={})

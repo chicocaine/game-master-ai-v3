@@ -607,7 +607,15 @@ def step_once(
                 block_3=b3,
                 block_4=b4,
             )
-        runtime.player_provider.enqueue(input_text, actor_instance_id=actor_id)
+        # When it's the enemy's turn in an ENCOUNTER, do NOT route user text into the
+        # player intent LLM. The enemy_provider in the chain will generate the action
+        # automatically (mirrors LiveLlmCliProvider._active_player_actor_id() in cli/provider.py).
+        is_enemy_turn = (
+            runtime.session.state is GameState.ENCOUNTER
+            and actor_id.startswith("enemy_")
+        )
+        if not is_enemy_turn:
+            runtime.player_provider.enqueue(input_text, actor_instance_id=actor_id)
     else:
         # Slash actions (or all input in deterministic mode) are translated directly.
         action = _parse_text_to_action(input_text, runtime.session)
@@ -625,7 +633,7 @@ def step_once(
                 block_1=b1, block_2=b2, block_3=b3, block_4=b4,
             )
 
-    # ── Auto-start encounter if entering a room with enemies ─────────────────
+    # ── Auto-start encounter if already pending before this step ─────────────
     if _should_auto_start_encounter(runtime.session):
         enc_result = runtime.session.start_room_encounter()
         _publish_events(runtime, enc_result.events)
@@ -648,6 +656,18 @@ def step_once(
     step_events = runtime.step_sink.all_events()
     runtime.step_sink.clear()
 
+    # ── Auto-start encounter if this step moved into a room with enemies ────
+    post_step_encounter_started = False
+    post_step_encounter_events: list[dict] = []
+    if _should_auto_start_encounter(runtime.session):
+        post_step_enc_result = runtime.session.start_room_encounter()
+        post_step_encounter_events = list(post_step_enc_result.events or [])
+        _publish_events(runtime, post_step_encounter_events)
+        enc_narration = _invoke_narration(runtime, post_step_encounter_events) if runtime.live_llm else None
+        if enc_narration:
+            chat_history.append({"role": "assistant", "content": enc_narration})
+        post_step_encounter_started = True
+
     last_action: Action | None = outcome.last_action
     last_result = outcome.last_result
 
@@ -668,6 +688,7 @@ def step_once(
     narration_text: str | None = None
     converse_reply: str | None = None
     expected_route: str | None = None
+    narration_attempted = False
 
     if runtime.live_llm and last_action is not None and last_result is not None:
         if last_action.type == ActionType.CONVERSE:
@@ -678,7 +699,9 @@ def step_once(
             converse_reply = _invoke_converse(runtime, last_action, last_result, route_reason="state_route_converse")
         elif runtime.session.state in {GameState.EXPLORATION, GameState.ENCOUNTER}:
             expected_route = "narration"
-            narration_text = _invoke_narration(runtime, step_events)
+            if not post_step_encounter_started:
+                narration_attempted = True
+                narration_text = _invoke_narration(runtime, step_events)
 
         if converse_reply:
             chat_history.append({"role": "assistant", "content": converse_reply})
@@ -692,7 +715,7 @@ def step_once(
                     "content": "I couldn't generate a converse response right now. Check your live LLM configuration and try again.",
                 }
             )
-        if expected_route == "narration" and step_events and not narration_text:
+        if expected_route == "narration" and narration_attempted and step_events and not narration_text:
             chat_history.append(
                 {
                     "role": "assistant",
@@ -701,7 +724,11 @@ def step_once(
             )
 
     # ── Update streams ────────────────────────────────────────────────────────
-    runtime.event_stream_text += _format_event_stream_entry(step, step_events)
+    step_event_batch = list(step_events)
+    if post_step_encounter_events:
+        step_event_batch.extend(post_step_encounter_events)
+
+    runtime.event_stream_text += _format_event_stream_entry(step, step_event_batch)
     runtime.action_stream_text += _format_action_stream_entry(step, last_action, last_result)
     runtime.reasoning_stream_text += _format_reasoning_stream_entry(
         step, last_action, narration_text, converse_reply

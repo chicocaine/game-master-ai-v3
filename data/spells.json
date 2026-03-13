@@ -36,7 +36,7 @@
 		"id": "spl_ice_lance",
 		"name": "Ice Lance",
 		"description": "A sharp shard of ice that hinders movement.",
-		"type": "control",
+		"type": ["attack", "control"],
 		"spell_cost": 2,
 		"parameters": {
 			"damage_types": ["cold"],

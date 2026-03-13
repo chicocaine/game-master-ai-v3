@@ -48,6 +48,16 @@ DATASET_LOAD_ORDER = [
 ]
 
 
+_SINGLE_AND_AOE_SPELL_TYPE_PAIRS = (
+	(SpellType.ATTACK, SpellType.AOE_ATTACK),
+	(SpellType.HEAL, SpellType.AOE_HEAL),
+	(SpellType.BUFF, SpellType.AOE_BUFF),
+	(SpellType.DEBUFF, SpellType.AOE_DEBUFF),
+	(SpellType.CONTROL, SpellType.AOE_CONTROL),
+	(SpellType.CLEANSE, SpellType.AOE_CLEANSE),
+)
+
+
 class DataLoader:
 	"""Load, validate, and hydrate game data from JSON files."""
 
@@ -100,6 +110,31 @@ class DataLoader:
 
 	def _validate_cross_references(self, raw: Dict[str, List[dict]]) -> None:
 		idx = {name: self._index_by_id(rows, name) for name, rows in raw.items()}
+
+		for spell in raw["spells"]:
+			spell_id = str(spell.get("id", ""))
+			raw_type = spell.get("type", "attack")
+			if isinstance(raw_type, list):
+				parsed_types = []
+				seen_types = set()
+				for item in raw_type:
+					spell_type = SpellType(str(item))
+					if spell_type in seen_types:
+						continue
+					parsed_types.append(spell_type)
+					seen_types.add(spell_type)
+			else:
+				parsed_types = [SpellType(str(raw_type))]
+				seen_types = set(parsed_types)
+
+			if not parsed_types:
+				raise DataLoaderError(f"Spell '{spell_id}' must declare at least one spell type.")
+
+			for single_target, aoe in _SINGLE_AND_AOE_SPELL_TYPE_PAIRS:
+				if single_target in seen_types and aoe in seen_types:
+					raise DataLoaderError(
+						f"Spell '{spell_id}' cannot mix spell types '{single_target.value}' and '{aoe.value}'."
+					)
 
 		for attack in raw["attacks"]:
 			for effect_ref in attack.get("parameters", {}).get("applied_status_effects", []):
@@ -215,7 +250,7 @@ class DataLoader:
 				id=row["id"],
 				name=str(row.get("name", "")),
 				description=str(row.get("description", "")),
-				type=SpellType(str(row.get("type", "attack"))),
+				type=row.get("type", "attack"),
 				spell_cost=int(row.get("spell_cost", 0)),
 				parameters=params,
 			)

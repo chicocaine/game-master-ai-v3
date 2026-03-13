@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 import math
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Tuple
 
 from game.core.action import Action
 from game.core.action_result import ActionResult
@@ -230,15 +230,19 @@ def _damage_amount_for_spell(spell: Spell, target: Any) -> int:
         damage_types=spell.damage_types or [DamageType.FORCE],
     )
 
-def _is_aoe_spell(spell_type: SpellType) -> bool:
-    return spell_type in {
+def _has_spell_type(spell_types: Iterable[SpellType], accepted_types: set[SpellType]) -> bool:
+    return any(spell_type in accepted_types for spell_type in spell_types)
+
+
+def _is_aoe_spell(spell_types: Iterable[SpellType]) -> bool:
+    return _has_spell_type(spell_types, {
         SpellType.AOE_ATTACK,
         SpellType.AOE_HEAL,
         SpellType.AOE_BUFF,
         SpellType.AOE_DEBUFF,
         SpellType.AOE_CONTROL,
         SpellType.AOE_CLEANSE,
-    }
+    })
 
 def _is_aoe_attack(attack_type: AttackType) -> bool:
     return attack_type in {
@@ -247,23 +251,27 @@ def _is_aoe_attack(attack_type: AttackType) -> bool:
         AttackType.AOE_UNARMED,
     }
 
-def _is_heal_spell(spell_type: SpellType) -> bool:
-    return spell_type in {SpellType.HEAL, SpellType.AOE_HEAL}
+def _is_attack_spell(spell_types: Iterable[SpellType]) -> bool:
+    return _has_spell_type(spell_types, {SpellType.ATTACK, SpellType.AOE_ATTACK})
 
 
-def _is_cleanse_spell(spell_type: SpellType) -> bool:
-    return spell_type in {SpellType.CLEANSE, SpellType.AOE_CLEANSE}
+def _is_heal_spell(spell_types: Iterable[SpellType]) -> bool:
+    return _has_spell_type(spell_types, {SpellType.HEAL, SpellType.AOE_HEAL})
 
 
-def _is_status_only_spell(spell_type: SpellType) -> bool:
-    return spell_type in {
+def _is_cleanse_spell(spell_types: Iterable[SpellType]) -> bool:
+    return _has_spell_type(spell_types, {SpellType.CLEANSE, SpellType.AOE_CLEANSE})
+
+
+def _has_status_component(spell_types: Iterable[SpellType]) -> bool:
+    return _has_spell_type(spell_types, {
         SpellType.BUFF,
         SpellType.DEBUFF,
         SpellType.CONTROL,
         SpellType.AOE_BUFF,
         SpellType.AOE_DEBUFF,
         SpellType.AOE_CONTROL,
-    }
+    })
 
 def _heal_amount_for_spell(spell: Spell) -> int:
     return max(0, roll_dice(spell.heal_roll))
@@ -497,11 +505,13 @@ def resolve_cast_spell_action(session: "GameSession", encounter: EncounterInstan
     if actor.spell_slots < spell.spell_cost:
         return ActionResult.failure(errors=["Not enough spell slots to cast this spell."])
 
+    spell_types = spell.spell_types
+
     targets, errors = _target_list_for_action(
         session=session,
         encounter=encounter,
         raw_target_ids=action.parameters.get("target_instance_ids", []),
-        is_aoe=_is_aoe_spell(spell.type),
+        is_aoe=_is_aoe_spell(spell_types),
     )
     if errors:
         return ActionResult.failure(errors=errors)
@@ -523,37 +533,8 @@ def resolve_cast_spell_action(session: "GameSession", encounter: EncounterInstan
     for target in targets:
         target_id = _instance_id(target)
 
-        if _is_heal_spell(spell.type):
-            healed_amount = _apply_heal(target, _heal_amount_for_spell(spell))
-            events.append({
-                "type": EventType.HEALING_APPLIED.value,
-                "target_instance_id": target_id,
-                "amount": healed_amount,
-                "source": "spell",
-                "source_id": spell.id,
-            })
-        elif _is_cleanse_spell(spell.type):
-            removed_count = _cleanse_status_effects(target, spell)
-            if removed_count > 0:
-                events.append({
-                    "type": EventType.STATUS_EFFECT_REMOVED.value,
-                    "target_instance_id": target_id,
-                    "count": removed_count,
-                    "source": "spell",
-                    "source_id": spell.id,
-                })
-        elif _is_status_only_spell(spell.type):
-            applicable_effects = _filter_applicable_status_effects(target, spell.applied_status_effects)
-            applied_effect_count = _apply_status_effects(target, applicable_effects)
-            if applied_effect_count > 0:
-                events.append({
-                    "type": EventType.STATUS_EFFECT_APPLIED.value,
-                    "target_instance_id": target_id,
-                    "count": applied_effect_count,
-                    "source": "spell",
-                    "source_id": spell.id,
-                })
-        else:
+        hit = True
+        if _is_attack_spell(spell_types):
             hit, hit_result, roll_events = _resolve_hit_result(
                 actor=actor,
                 actor_id=action.actor_instance_id,
@@ -570,31 +551,55 @@ def resolve_cast_spell_action(session: "GameSession", encounter: EncounterInstan
                 "spell_id": spell.id,
                 "hit_result": hit_result,
             })
-            if hit:
-                damage = _damage_amount_for_spell(spell, target)
-                applied_damage = _apply_damage(target, damage)
+
+        if hit and _is_attack_spell(spell_types):
+            damage = _damage_amount_for_spell(spell, target)
+            applied_damage = _apply_damage(target, damage)
+            events.append({
+                "type": EventType.DAMAGE_APPLIED.value,
+                "target_instance_id": target_id,
+                "amount": applied_damage,
+                "source": "spell",
+                "source_id": spell.id,
+            })
+            if target.hp <= 0:
                 events.append({
-                    "type": EventType.DAMAGE_APPLIED.value,
+                    "type": EventType.DEATH.value,
                     "target_instance_id": target_id,
-                    "amount": applied_damage,
+                })
+
+        if hit and _is_heal_spell(spell_types):
+            healed_amount = _apply_heal(target, _heal_amount_for_spell(spell))
+            events.append({
+                "type": EventType.HEALING_APPLIED.value,
+                "target_instance_id": target_id,
+                "amount": healed_amount,
+                "source": "spell",
+                "source_id": spell.id,
+            })
+
+        if hit and _is_cleanse_spell(spell_types):
+            removed_count = _cleanse_status_effects(target, spell)
+            if removed_count > 0:
+                events.append({
+                    "type": EventType.STATUS_EFFECT_REMOVED.value,
+                    "target_instance_id": target_id,
+                    "count": removed_count,
                     "source": "spell",
                     "source_id": spell.id,
                 })
-                applicable_effects = _filter_applicable_status_effects(target, spell.applied_status_effects)
-                applied_effect_count = _apply_status_effects(target, applicable_effects)
-                if applied_effect_count > 0:
-                    events.append({
-                        "type": EventType.STATUS_EFFECT_APPLIED.value,
-                        "target_instance_id": target_id,
-                        "count": applied_effect_count,
-                        "source": "spell",
-                        "source_id": spell.id,
-                    })
-                if target.hp <= 0:
-                    events.append({
-                        "type": EventType.DEATH.value,
-                        "target_instance_id": target_id,
-                    })
+
+        if hit and _has_status_component(spell_types):
+            applicable_effects = _filter_applicable_status_effects(target, spell.applied_status_effects)
+            applied_effect_count = _apply_status_effects(target, applicable_effects)
+            if applied_effect_count > 0:
+                events.append({
+                    "type": EventType.STATUS_EFFECT_APPLIED.value,
+                    "target_instance_id": target_id,
+                    "count": applied_effect_count,
+                    "source": "spell",
+                    "source_id": spell.id,
+                })
 
         state_changes["actors"][target_id] = {
             "hp": target.hp,

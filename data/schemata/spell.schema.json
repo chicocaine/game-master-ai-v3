@@ -15,20 +15,96 @@
 			"name": { "type": "string", "minLength": 1 },
 			"description": { "type": "string" },
 			"type": {
-				"type": "string",
-				"enum": [
-					"attack",
-					"heal",
-					"buff",
-					"debuff",
-					"control",
-					"cleanse",
-					"aoe_attack",
-					"aoe_heal",
-					"aoe_buff",
-					"aoe_debuff",
-					"aoe_control",
-					"aoe_cleanse"
+				"oneOf": [
+					{
+						"type": "string",
+						"enum": [
+							"attack",
+							"heal",
+							"buff",
+							"debuff",
+							"control",
+							"cleanse",
+							"aoe_attack",
+							"aoe_heal",
+							"aoe_buff",
+							"aoe_debuff",
+							"aoe_control",
+							"aoe_cleanse"
+						]
+					},
+					{
+						"type": "array",
+						"minItems": 1,
+						"uniqueItems": true,
+						"items": {
+							"type": "string",
+							"enum": [
+								"attack",
+								"heal",
+								"buff",
+								"debuff",
+								"control",
+								"cleanse",
+								"aoe_attack",
+								"aoe_heal",
+								"aoe_buff",
+								"aoe_debuff",
+								"aoe_control",
+								"aoe_cleanse"
+							]
+						},
+						"allOf": [
+							{
+								"not": {
+									"allOf": [
+										{"contains": {"const": "attack"}},
+										{"contains": {"const": "aoe_attack"}}
+									]
+								}
+							},
+							{
+								"not": {
+									"allOf": [
+										{"contains": {"const": "heal"}},
+										{"contains": {"const": "aoe_heal"}}
+									]
+								}
+							},
+							{
+								"not": {
+									"allOf": [
+										{"contains": {"const": "buff"}},
+										{"contains": {"const": "aoe_buff"}}
+									]
+								}
+							},
+							{
+								"not": {
+									"allOf": [
+										{"contains": {"const": "debuff"}},
+										{"contains": {"const": "aoe_debuff"}}
+									]
+								}
+							},
+							{
+								"not": {
+									"allOf": [
+										{"contains": {"const": "control"}},
+										{"contains": {"const": "aoe_control"}}
+									]
+								}
+							},
+							{
+								"not": {
+									"allOf": [
+										{"contains": {"const": "cleanse"}},
+										{"contains": {"const": "aoe_cleanse"}}
+									]
+								}
+							}
+						]
+					}
 				]
 			},
 			"spell_cost": { "type": "integer", "minimum": 0 },
