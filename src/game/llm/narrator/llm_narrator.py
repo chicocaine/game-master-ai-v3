@@ -25,7 +25,12 @@ NARRATION_PROMPT_VERSION = "narration.v2"
 
 
 DEFAULT_NARRATION_TRIGGER_TYPES = {
+    EventType.ACTION_REJECTED.value,
+    EventType.MOVEMENT_RESOLVED.value,
     EventType.ROOM_ENTERED.value,
+    EventType.ROOM_CLEARED.value,
+    EventType.REST_STARTED.value,
+    EventType.REST_COMPLETED.value,
     EventType.ENCOUNTER_STARTED.value,
     EventType.ATTACK_HIT.value,
     EventType.ATTACK_MISSED.value,

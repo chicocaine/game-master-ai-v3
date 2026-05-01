@@ -339,6 +339,40 @@ def test_game_session_start_and_end_encounter_helpers_validate_state() -> None:
     assert result.errors and "only end while in encounter" in result.errors[0]
 
 
+def test_encounter_end_marks_current_room_cleared_when_all_room_encounters_cleared() -> None:
+    session = _session()
+    dungeon = _dungeon_with_encounter()
+
+    create_player_action = create_action(
+        ActionType.CREATE_PLAYER,
+        parameters={
+            "id": "player_1",
+            "name": "Player",
+            "description": "Recruit",
+            "race": _race(),
+            "archetype": _archetype(),
+            "weapons": [_weapon()],
+        },
+        actor_instance_id="system",
+    )
+    assert session.handle_action(create_player_action).ok is True
+    assert session.pregame.handle_choose_dungeon(session, dungeon).ok is True
+    assert session.handle_action(create_action(ActionType.START, actor_instance_id="system")).ok is True
+
+    room = session.exploration.current_room
+    assert room is not None
+    assert room.is_cleared is False
+
+    encounter = room.encounters[0]
+    assert session.start_encounter(encounter).ok is True
+
+    end_result = session.encounter.end_encounter(session)
+    assert end_result.ok is True
+    assert session.state is GameState.EXPLORATION
+    assert room.is_cleared is True
+    assert any(event["type"] == "room_cleared" for event in end_result.events)
+
+
 def test_game_session_start_room_encounter_and_room_clear_sync() -> None:
     session = _session()
     dungeon = _dungeon_with_encounter()

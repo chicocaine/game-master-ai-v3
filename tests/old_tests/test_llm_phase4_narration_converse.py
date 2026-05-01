@@ -120,6 +120,28 @@ def test_llm_narrator_triggers_on_encounter_started_event():
     assert client.calls == 1
 
 
+def test_llm_narrator_triggers_on_action_rejected_event():
+    client = _FakeClient([LlmResponse(text='{"text":"The path is barred until the room is secure.","reasoning":"A rejected move in exploration needs immediate explanatory narration."}')])
+    narrator = LlmNarrator(client=client, settings=_settings())
+
+    output = narrator.narrate(
+        [
+            {
+                "type": "action_rejected",
+                "reason": "state_handler_failed",
+                "errors": ["Cannot move while current room is not cleared."],
+                "action_type": "move",
+                "actor_instance_id": "player_1",
+            }
+        ],
+        _session(GameState.EXPLORATION),
+        EngineContext(session_id="n3c"),
+    )
+
+    assert output == "The path is barred until the room is secure."
+    assert client.calls == 1
+
+
 def test_player_intent_provider_returns_intent_only_converse_action():
     intent_client = _FakeClient([LlmResponse(text='{"type":"converse","parameters":{"message":"assistant text"},"reasoning":"Need clarification."}')])
     provider = PlayerIntentLlmProvider(client=intent_client, settings=_settings())

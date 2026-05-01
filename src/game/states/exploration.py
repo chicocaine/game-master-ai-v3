@@ -39,10 +39,32 @@ class ExplorationState:
             normalized = value.strip()
             if not normalized:
                 raise ValueError("Invalid rest type.")
+            # try direct value match (by enum value)
             try:
-                return RestType(normalized)
+                return RestType(normalized.lower())
             except ValueError:
-                return RestType[normalized.upper()]
+                pass
+
+            # normalize common variants like 'short_rest', 'short-rest', 'short rest', 'SHORT_REST'
+            cleaned = normalized.strip().lower()
+            # remove common suffix/prefix tokens
+            for suffix in ("_rest", "-rest", " rest", "rest"):
+                if cleaned.endswith(suffix):
+                    cleaned = cleaned[: -len(suffix)]
+                    break
+            # unify separators
+            cleaned = cleaned.replace("-", "_").replace(" ", "_")
+
+            # match against enum names/values
+            for member in RestType:
+                if cleaned == member.name.lower() or cleaned == member.value:
+                    return member
+
+            # final attempt: try lookup by name (may raise KeyError)
+            try:
+                return RestType[cleaned.upper()]
+            except Exception:
+                raise ValueError("Invalid rest type.")
         raise ValueError("Invalid rest type.")
 
     @staticmethod

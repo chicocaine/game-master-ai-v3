@@ -112,6 +112,46 @@ def render_encounter(session: GameSession) -> str:
 
 def _render_event(event: dict) -> str:
     event_type = str(event.get("type", "event"))
+    if event_type == "player_message":
+        source = str(event.get("source", "player")).strip() or "player"
+        message = str(event.get("message", "")).strip()
+        return f"Player message ({source}): {message}" if message else f"Player message ({source})"
+    if event_type == "system_message":
+        source = str(event.get("source", "system")).strip() or "system"
+        message = str(event.get("message", "")).strip()
+        kind = str(event.get("kind", "")).strip()
+        kind_suffix = f" [{kind}]" if kind else ""
+        return f"System message ({source}){kind_suffix}: {message}" if message else f"System message ({source}){kind_suffix}"
+    if event_type == "narration":
+        source = str(event.get("source", "gm")).strip() or "gm"
+        message = str(event.get("message", "")).strip()
+        return f"Narration ({source}): {message}" if message else f"Narration ({source})"
+    if event_type == "action_submitted":
+        return (
+            f"Action submitted: {event.get('action_type', '')} "
+            f"by {event.get('actor_instance_id', '')}"
+        ).strip()
+    if event_type == "action_validated":
+        return (
+            f"Action validated: {event.get('action_type', '')} "
+            f"by {event.get('actor_instance_id', '')}"
+        ).strip()
+    if event_type == "action_resolved":
+        return (
+            f"Action resolved: {event.get('action_type', '')} "
+            f"by {event.get('actor_instance_id', '')}"
+        ).strip()
+    if event_type == "action_rejected":
+        reason = str(event.get("reason", "unknown"))
+        action_type = str(event.get("action_type", ""))
+        actor = str(event.get("actor_instance_id", ""))
+        errors = event.get("errors", [])
+        if isinstance(errors, list) and errors:
+            return (
+                f"Action rejected: {action_type} by {actor} "
+                f"(reason={reason}; errors={'; '.join(str(error) for error in errors)})"
+            )
+        return f"Action rejected: {action_type} by {actor} (reason={reason})"
     if event_type == "converse":
         message = str(event.get("message", "")).strip()
         return f"Converse: {message}" if message else "Converse"

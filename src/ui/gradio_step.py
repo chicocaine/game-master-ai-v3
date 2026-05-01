@@ -26,7 +26,7 @@ from game.cli.renderer import (
 )
 from game.cli.session_view import current_actor_id
 from game.core.action import Action, create_action
-from game.core.enums import ActionType
+from game.core.enums import ActionType, EventType
 from game.engine.loop import run_engine_loop
 from game.enums import GameState, RestType
 from game.factories.game_factory import GameFactory
@@ -238,10 +238,17 @@ def _format_action_stream_entry(step: int, action: Action | None, result) -> str
     params = getattr(action, "parameters", {}) or {}
     ok = getattr(result, "ok", None)
     status = "ok" if ok else "err"
+    errors = list(getattr(result, "errors", []) or []) if result is not None else []
     try:
         params_str = json.dumps(params, ensure_ascii=False, default=str)
     except Exception:
         params_str = repr(params)
+    if errors:
+        try:
+            errors_str = json.dumps(errors, ensure_ascii=False, default=str)
+        except Exception:
+            errors_str = repr(errors)
+        return f"[step {step}] [{actor}] {action.type.value} {params_str} ({status}) errors={errors_str}\n"
     return f"[step {step}] [{actor}] {action.type.value} {params_str} ({status})\n"
 
 
@@ -430,6 +437,50 @@ def _publish_events(runtime: "GradioRuntime", events: list) -> None:
             )
 
 
+def _emit_ui_message_event(
+    runtime: "GradioRuntime",
+    *,
+    event_type: EventType,
+    message: str,
+    source: str,
+    actor_instance_id: str = "system",
+    extra: dict | None = None,
+) -> dict:
+    event = {
+        "type": event_type.value,
+        "actor_instance_id": actor_instance_id,
+        "source": source,
+        "message": str(message or ""),
+    }
+    if extra:
+        event.update(dict(extra))
+    _publish_events(runtime, [event])
+    return event
+
+
+def _is_enemy_turn(session) -> bool:
+    if session.state is not GameState.ENCOUNTER:
+        return False
+    actor_id = current_actor_id(session)
+    return bool(actor_id) and actor_id.startswith("enemy_")
+
+
+def _events_trigger_narration(runtime: "GradioRuntime", events: list) -> bool:
+    if runtime.narrator is None or not events:
+        return False
+    should_narrate = getattr(runtime.narrator, "should_narrate", None)
+    if callable(should_narrate):
+        try:
+            return bool(should_narrate(events))
+        except Exception:
+            logger.exception(
+                "Narration trigger check failed.",
+                extra={"session_id": runtime.ctx.session_id, "step_count": runtime.ctx.step_count},
+            )
+            return False
+    return True
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Converse / narration helpers (mirrors cli/app.py)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -533,14 +584,39 @@ def step_once(
     step = runtime.step_count
     input_text = str(user_input or "").strip()
     chat_history = list(chat_history or [])
+    ui_events: list[dict] = []
     if append_user_message:
         chat_history.append({"role": "user", "content": input_text})
+    if input_text:
+        actor_id = current_actor_id(runtime.session) or (
+            runtime.session.party[0].player_instance_id if runtime.session.party else "system"
+        )
+        ui_events.append(
+            _emit_ui_message_event(
+                runtime,
+                event_type=EventType.PLAYER_MESSAGE,
+                message=input_text,
+                source="gradio_ui",
+                actor_instance_id=actor_id,
+            )
+        )
 
     command = None
     try:
         command = parse_cli_input(input_text)
     except ValueError as exc:
-        chat_history.append({"role": "assistant", "content": str(exc)})
+        error_text = str(exc)
+        chat_history.append({"role": "assistant", "content": error_text})
+        ui_events.append(
+            _emit_ui_message_event(
+                runtime,
+                event_type=EventType.SYSTEM_MESSAGE,
+                message=error_text,
+                source="gradio_ui",
+                extra={"kind": "parse_error"},
+            )
+        )
+        runtime.event_stream_text += _format_event_stream_entry(step, ui_events)
         b1, b2, b3, b4 = render_state_blocks(runtime.session)
         return StepResult(
             chat_history=chat_history,
@@ -554,6 +630,7 @@ def step_once(
         )
 
     if command is None:
+        runtime.event_stream_text += _format_event_stream_entry(step, ui_events)
         b1, b2, b3, b4 = render_state_blocks(runtime.session)
         return StepResult(
             chat_history=chat_history,
@@ -571,6 +648,16 @@ def step_once(
         output_only_text = _command_output_only(runtime, command)
         if output_only_text is not None:
             chat_history.append({"role": "assistant", "content": output_only_text})
+            ui_events.append(
+                _emit_ui_message_event(
+                    runtime,
+                    event_type=EventType.SYSTEM_MESSAGE,
+                    message=output_only_text,
+                    source="gradio_ui",
+                    extra={"kind": "command_output", "command": command.name},
+                )
+            )
+            runtime.event_stream_text += _format_event_stream_entry(step, ui_events)
             b1, b2, b3, b4 = render_state_blocks(runtime.session)
             return StepResult(
                 chat_history=chat_history,
@@ -590,12 +677,23 @@ def step_once(
             runtime.session.party[0].player_instance_id if runtime.session.party else ""
         )
         if runtime.player_provider is None:
+            unavailable_text = "Live LLM parser is unavailable. Check your LLM configuration."
             chat_history.append(
                 {
                     "role": "assistant",
-                    "content": "Live LLM parser is unavailable. Check your LLM configuration.",
+                    "content": unavailable_text,
                 }
             )
+            ui_events.append(
+                _emit_ui_message_event(
+                    runtime,
+                    event_type=EventType.SYSTEM_MESSAGE,
+                    message=unavailable_text,
+                    source="gradio_ui",
+                    extra={"kind": "llm_unavailable", "route": "player_intent"},
+                )
+            )
+            runtime.event_stream_text += _format_event_stream_entry(step, ui_events)
             b1, b2, b3, b4 = render_state_blocks(runtime.session)
             return StepResult(
                 chat_history=chat_history,
@@ -623,7 +721,18 @@ def step_once(
             runtime.queue_provider.enqueue(action)
         else:
             # Unknown command — echo a hint back and return unchanged state
-            chat_history.append({"role": "assistant", "content": "Unknown command. Use /help or type natural language."})
+            unknown_text = "Unknown command. Use /help or type natural language."
+            chat_history.append({"role": "assistant", "content": unknown_text})
+            ui_events.append(
+                _emit_ui_message_event(
+                    runtime,
+                    event_type=EventType.SYSTEM_MESSAGE,
+                    message=unknown_text,
+                    source="gradio_ui",
+                    extra={"kind": "unknown_command"},
+                )
+            )
+            runtime.event_stream_text += _format_event_stream_entry(step, ui_events)
             b1, b2, b3, b4 = render_state_blocks(runtime.session)
             return StepResult(
                 chat_history=chat_history,
@@ -699,32 +808,69 @@ def step_once(
             converse_reply = _invoke_converse(runtime, last_action, last_result, route_reason="state_route_converse")
         elif runtime.session.state in {GameState.EXPLORATION, GameState.ENCOUNTER}:
             expected_route = "narration"
-            if not post_step_encounter_started:
+            if not post_step_encounter_started and _events_trigger_narration(runtime, step_events):
                 narration_attempted = True
                 narration_text = _invoke_narration(runtime, step_events)
 
         if converse_reply:
             chat_history.append({"role": "assistant", "content": converse_reply})
+            ui_events.append(
+                _emit_ui_message_event(
+                    runtime,
+                    event_type=EventType.SYSTEM_MESSAGE,
+                    message=converse_reply,
+                    source="converse_llm",
+                    extra={"kind": "converse_reply"},
+                )
+            )
         if narration_text:
             chat_history.append({"role": "assistant", "content": narration_text})
+            ui_events.append(
+                _emit_ui_message_event(
+                    runtime,
+                    event_type=EventType.NARRATION,
+                    message=narration_text,
+                    source="narration_llm",
+                )
+            )
 
         if expected_route == "converse" and not converse_reply:
+            converse_fallback = "I couldn't generate a converse response right now. Check your live LLM configuration and try again."
             chat_history.append(
                 {
                     "role": "assistant",
-                    "content": "I couldn't generate a converse response right now. Check your live LLM configuration and try again.",
+                    "content": converse_fallback,
                 }
             )
+            ui_events.append(
+                _emit_ui_message_event(
+                    runtime,
+                    event_type=EventType.SYSTEM_MESSAGE,
+                    message=converse_fallback,
+                    source="gradio_ui",
+                    extra={"kind": "converse_fallback"},
+                )
+            )
         if expected_route == "narration" and narration_attempted and step_events and not narration_text:
+            narration_fallback = "I couldn't generate narration for that action right now. Check your live LLM configuration and try again."
             chat_history.append(
                 {
                     "role": "assistant",
-                    "content": "I couldn't generate narration for that action right now. Check your live LLM configuration and try again.",
+                    "content": narration_fallback,
                 }
+            )
+            ui_events.append(
+                _emit_ui_message_event(
+                    runtime,
+                    event_type=EventType.SYSTEM_MESSAGE,
+                    message=narration_fallback,
+                    source="gradio_ui",
+                    extra={"kind": "narration_fallback"},
+                )
             )
 
     # ── Update streams ────────────────────────────────────────────────────────
-    step_event_batch = list(step_events)
+    step_event_batch = [*ui_events, *list(step_events)]
     if post_step_encounter_events:
         step_event_batch.extend(post_step_encounter_events)
 
@@ -734,6 +880,51 @@ def step_once(
         step, last_action, narration_text, converse_reply
     )
     runtime.step_count += 1
+
+    # ── Auto-resolve enemy turns so Gradio does not require extra user prompts ──
+    auto_enemy_steps = 0
+    max_auto_enemy_steps = 8
+    while _is_enemy_turn(runtime.session) and auto_enemy_steps < max_auto_enemy_steps:
+        enemy_outcome = run_engine_loop(
+            session=runtime.session,
+            providers=runtime.providers,
+            event_sinks=runtime.event_sinks,
+            narrator=None,
+            persistence=runtime.persistence,
+            ctx=runtime.ctx,
+            max_steps=1,
+        )
+        enemy_step_events = runtime.step_sink.all_events()
+        runtime.step_sink.clear()
+
+        enemy_action = enemy_outcome.last_action
+        enemy_result = enemy_outcome.last_result
+        enemy_narration: str | None = None
+
+        if runtime.live_llm and _events_trigger_narration(runtime, enemy_step_events):
+            enemy_narration = _invoke_narration(runtime, enemy_step_events)
+            if enemy_narration:
+                chat_history.append({"role": "assistant", "content": enemy_narration})
+                enemy_step_events.append(
+                    _emit_ui_message_event(
+                        runtime,
+                        event_type=EventType.NARRATION,
+                        message=enemy_narration,
+                        source="narration_llm",
+                    )
+                )
+
+        enemy_step = runtime.step_count
+        runtime.event_stream_text += _format_event_stream_entry(enemy_step, enemy_step_events)
+        runtime.action_stream_text += _format_action_stream_entry(enemy_step, enemy_action, enemy_result)
+        runtime.reasoning_stream_text += _format_reasoning_stream_entry(enemy_step, enemy_action, enemy_narration, None)
+        runtime.step_count += 1
+        auto_enemy_steps += 1
+
+        if enemy_outcome.stopped_reason in {"idle", "postgame", "persistence_failure"}:
+            break
+        if enemy_action is None:
+            break
 
     # ── State panel (column 3) ────────────────────────────────────────────────
     b1, b2, b3, b4 = render_state_blocks(runtime.session)

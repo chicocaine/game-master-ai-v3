@@ -458,6 +458,19 @@ class EncounterState:
         self.current_encounter = None
         self.turn_order = []
         self.current_turn_index = 0
+
+        room_cleared_event: dict | None = None
+        current_room = getattr(getattr(session, "exploration", None), "current_room", None)
+        if current_room is not None:
+            room_encounters = list(getattr(current_room, "encounters", []) or [])
+            current_room.is_cleared = all(bool(getattr(room_encounter, "cleared", False)) for room_encounter in room_encounters)
+            if current_room.is_cleared:
+                room_cleared_event = {
+                    "type": EventType.ROOM_CLEARED.value,
+                    "room_id": str(getattr(current_room, "id", "")),
+                    "room_name": str(getattr(current_room, "name", "")),
+                }
+
         transition_result = self._transition(session, GameState.EXPLORATION)
         if transition_result.errors:
             return transition_result
@@ -473,6 +486,7 @@ class EncounterState:
                     "session_points": session.points,
                 },
                 *status_cleared_events,
+                *([room_cleared_event] if room_cleared_event is not None else []),
                 {
                     "type": EventType.ENCOUNTER_ENDED.value,
                     "encounter_id": encounter_id,
